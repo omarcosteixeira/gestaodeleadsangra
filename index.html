@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cata Lead - Sistema de Gerenciamento</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .hidden {
+            display: none;
+        }
+        .tab-button.active {
+            border-bottom-color: #3b82f6;
+            color: #3b82f6;
+            font-weight: 600;
+        }
+        .tab-button {
+            border-bottom: 2px solid transparent;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <!-- Container Principal -->
+    <div id="app" class="min-h-screen">
+
+        <!-- Tela de Login -->
+        <div id="login-view" class="flex items-center justify-center min-h-screen bg-gray-200">
+            <div class="w-full max-w-md p-8 space-y-6 bg-white rounded-xl shadow-lg">
+                <div class="text-center">
+                    <i class="fas fa-bullseye text-4xl text-blue-600"></i>
+                    <h1 class="text-2xl font-bold text-gray-900 mt-2">Cata Lead</h1>
+                    <p class="text-gray-600">Bem-vindo! Faça login para continuar.</p>
+                </div>
+                <form id="login-form" class="space-y-6">
+                    <div>
+                        <label for="email" class="text-sm font-medium text-gray-700">Email</label>
+                        <input id="email" name="email" type="email" required class="w-full px-4 py-2 mt-1 text-gray-700 bg-gray-100 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="seu@email.com">
+                    </div>
+                    <div>
+                        <label for="password" class="text-sm font-medium text-gray-700">Senha</label>
+                        <input id="password" name="password" type="password" required class="w-full px-4 py-2 mt-1 text-gray-700 bg-gray-100 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="********">
+                    </div>
+                    <button type="submit" class="w-full py-3 font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors">
+                        Entrar
+                    </button>
+                </form>
+                <div id="login-error" class="text-center text-red-500 text-sm"></div>
+            </div>
+        </div>
+
+        <!-- Tela de Cadastro do Administrador -->
+        <div id="admin-register-view" class="hidden flex items-center justify-center min-h-screen bg-gray-200">
+            <div class="w-full max-w-md p-8 space-y-6 bg-white rounded-xl shadow-lg">
+                <div class="text-center">
+                    <i class="fas fa-user-shield text-4xl text-blue-600"></i>
+                    <h1 class="text-2xl font-bold text-gray-900 mt-2">Cadastro do Administrador</h1>
+                    <p class="text-gray-600">Bem-vindo! Cadastre o primeiro usuário administrador do sistema.</p>
+                </div>
+                <form id="admin-register-form" class="space-y-6">
+                    <div>
+                        <label for="admin-email" class="text-sm font-medium text-gray-700">Email</label>
+                        <input id="admin-email" name="admin-email" type="email" required class="w-full px-4 py-2 mt-1 text-gray-700 bg-gray-100 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="admin@email.com">
+                    </div>
+                    <div>
+                        <label for="admin-password" class="text-sm font-medium text-gray-700">Senha</label>
+                        <input id="admin-password" name="admin-password" type="password" required class="w-full px-4 py-2 mt-1 text-gray-700 bg-gray-100 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="********">
+                    </div>
+                    <button type="submit" class="w-full py-3 font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors">
+                        Cadastrar Administrador
+                    </button>
+                </form>
+                <div id="admin-register-error" class="text-center text-red-500 text-sm"></div>
+            </div>
+        </div>
+
+        <!-- Tela Principal da Aplicação -->
+        <div id="main-app-view" class="hidden">
+            <header class="bg-white shadow-md">
+                <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+                    <h1 class="text-xl font-bold text-blue-600"><i class="fas fa-bullseye"></i> Cata Lead</h1>
+                    <div class="flex items-center space-x-4">
+                        <span id="user-email-display" class="text-sm text-gray-600"></span>
+                        <button id="logout-button" class="px-3 py-1.5 text-sm font-semibold text-white bg-red-500 rounded-lg hover:bg-red-600 transition-colors">
+                            <i class="fas fa-sign-out-alt"></i> Sair
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <main class="container mx-auto p-4 md:p-6">
+                <!-- Abas de Navegação -->
+                <nav class="mb-6 border-b border-gray-200">
+                    <div class="flex space-x-4">
+                        <button data-tab="cadastro" class="tab-button py-2 px-1 text-gray-600 hover:text-blue-600" id="tab-cadastro-btn"><i class="fas fa-plus-circle mr-2"></i>Cadastrar Lead</button>
+                        <button data-tab="leads" class="tab-button py-2 px-1 text-gray-600 hover:text-blue-600" id="tab-leads-btn"><i class="fas fa-list-ul mr-2"></i>Leads Cadastrados</button>
+                        <button data-tab="historico" class="tab-button py-2 px-1 text-gray-600 hover:text-blue-600" id="tab-historico-btn"><i class="fas fa-history mr-2"></i>Histórico</button>
+                        <button data-tab="usuarios" class="tab-button py-2 px-1 text-gray-600 hover:text-blue-600" id="tab-usuarios-btn"><i class="fas fa-users-cog mr-2"></i>Gerenciar Usuários</button>
+                    </div>
+                </nav>
+
+                <!-- Conteúdo das Abas -->
+                <div id="tab-content">
+                    <!-- Aba de Cadastro -->
+                    <div id="cadastro-tab" class="tab-pane bg-white p-6 rounded-xl shadow-lg">
+                        <h2 class="text-2xl font-bold mb-4">Cadastrar Novo Lead</h2>
+                        <form id="add-lead-form" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="md:col-span-2">
+                                <label for="lead-acao" class="block text-sm font-medium text-gray-700">Nome da Ação <span class="text-red-500">*</span></label>
+                                <input type="text" id="lead-acao" required class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label for="lead-nome" class="block text-sm font-medium text-gray-700">Nome <span class="text-red-500">*</span></label>
+                                <input type="text" id="lead-nome" required class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label for="lead-telefone" class="block text-sm font-medium text-gray-700">Telefone (com DDD) <span class="text-red-500">*</span></label>
+                                <input type="tel" id="lead-telefone" required placeholder="11999998888" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label for="lead-email" class="block text-sm font-medium text-gray-700">Email</label>
+                                <input type="email" id="lead-email" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label for="lead-cpf" class="block text-sm font-medium text-gray-700">CPF</label>
+                                <input type="text" id="lead-cpf" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div class="md:col-span-2">
+                                <label for="lead-curso" class="block text-sm font-medium text-gray-700">Curso de Interesse</label>
+                                <input type="text" id="lead-curso" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div class="md:col-span-2 text-right">
+                                <button type="submit" class="inline-flex justify-center py-2 px-6 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
+                                    Salvar Lead
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Aba de Leads Cadastrados -->
+                    <div id="leads-tab" class="tab-pane hidden">
+                       <div class="bg-white p-6 rounded-xl shadow-lg">
+                           <h2 class="text-2xl font-bold mb-4">Leads Cadastrados</h2>
+                           <div class="overflow-x-auto">
+                               <table class="min-w-full bg-white">
+                                   <thead class="bg-gray-50">
+                                       <tr>
+                                           <th class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
+                                           <th class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Telefone</th>
+                                           <th class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ação</th>
+                                           <th class="py-3 px-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Convertido</th>
+                                           <th class="py-3 px-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                                       </tr>
+                                   </thead>
+                                   <tbody id="leads-list" class="divide-y divide-gray-200">
+                                       <!-- Leads serão inseridos aqui via JS -->
+                                   </tbody>
+                               </table>
+                           </div>
+                       </div>
+                    </div>
+
+                    <!-- Aba de Histórico -->
+                    <div id="historico-tab" class="tab-pane hidden">
+                        <div class="bg-white p-6 rounded-xl shadow-lg">
+                            <h2 class="text-2xl font-bold mb-4">Histórico e Filtros</h2>
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4 p-4 border rounded-lg bg-gray-50">
+                                <input type="text" id="filter-acao" placeholder="Filtrar por ação..." class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                                <input type="text" id="filter-promotor" placeholder="Filtrar por promotor..." class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                                <input type="date" id="filter-data" class="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-500">
+                                <select id="filter-status" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                                    <option value="">Todos os status</option>
+                                    <option value="true">Convertidos</option>
+                                    <option value="false">Não Convertidos</option>
+                                </select>
+                            </div>
+                             <div class="overflow-x-auto">
+                               <table class="min-w-full bg-white">
+                                   <thead class="bg-gray-50">
+                                       <tr>
+                                           <th class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
+                                           <th class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
+                                           <th class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Telefone</th>
+                                           <th class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ação</th>
+                                           <th class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Promotor</th>
+                                           <th class="py-3 px-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                       </tr>
+                                   </thead>
+                                   <tbody id="historico-list" class="divide-y divide-gray-200">
+                                       <!-- Histórico será inserido aqui via JS -->
+                                   </tbody>
+                               </table>
+                           </div>
+                        </div>
+                    </div>
+
+                    <!-- Aba de Gerenciamento de Usuários -->
+                    <div id="usuarios-tab" class="tab-pane hidden">
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-lg">
+                                <h3 class="text-xl font-bold mb-4">Adicionar Novo Usuário</h3>
+                                <form id="add-user-form" class="space-y-4">
+                                    <div>
+                                        <label for="new-user-email" class="block text-sm font-medium text-gray-700">Email do Usuário</label>
+                                        <input type="email" id="new-user-email" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
+                                    </div>
+                                    <div>
+                                        <label for="new-user-password" class="block text-sm font-medium text-gray-700">Senha Provisória</label>
+                                        <input type="password" id="new-user-password" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
+                                    </div>
+                                    <div>
+                                        <label for="new-user-role" class="block text-sm font-medium text-gray-700">Perfil de Acesso</label>
+                                        <select id="new-user-role" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
+                                            <option value="promotor">Promotor</option>
+                                            <option value="qg">QG</option>
+                                            <option value="lider">Líder / FDV</option>
+                                        </select>
+                                    </div>
+                                    <button type="submit" class="w-full py-2 px-4 font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors">Criar Usuário</button>
+                                </form>
+                            </div>
+                            <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-lg">
+                                <h3 class="text-xl font-bold mb-4">Usuários do Sistema</h3>
+                                <div class="overflow-x-auto">
+                                    <table class="min-w-full bg-white">
+                                        <thead class="bg-gray-50">
+                                            <tr>
+                                                <th class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                                                <th class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Perfil</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="users-list" class="divide-y divide-gray-200">
+                                            <!-- Lista de usuários aqui -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+    
+    <!-- Modal de Notificação -->
+    <div id="notification-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm text-center">
+            <p id="notification-message" class="text-lg"></p>
+            <button id="notification-close-btn" class="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">OK</button>
+        </div>
+    </div>
+
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        // --- CONFIGURAÇÃO DO FIREBASE ---
+        // As credenciais do Firebase são injetadas pelo ambiente de execução.
+        // Para testes locais, você pode substituir este bloco pela configuração do seu projeto.
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const appId = typeof __app_id !== 'undefined' ? __app_id : (firebaseConfig.projectId || 'default-app-id');
+
+
+        // --- IMPORTAÇÕES DO FIREBASE ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, signInWithCustomToken, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, addDoc, getDocs, query, where, onSnapshot, setDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // --- INICIALIZAÇÃO DO FIREBASE ---
+        let app, auth, db, secondaryAuth;
+        let currentUser = null;
+        let currentUserRole = null;
+        let allLeads = []; // Cache local para filtros
+
+        if (Object.keys(firebaseConfig).length > 0) {
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+
+            // App secundário para criação de usuários sem deslogar o admin
+            const secondaryApp = initializeApp(firebaseConfig, "userCreationApp");
+            secondaryAuth = getAuth(secondaryApp);
+        } else {
+            console.error("Configuração do Firebase não encontrada. O aplicativo não funcionará corretamente.");
+            showNotification("Erro de configuração. Contate o administrador.");
+        }
+
+
+        // --- ELEMENTOS DO DOM ---
+        const loginView = document.getElementById('login-view');
+        const adminRegisterView = document.getElementById('admin-register-view');
+        const mainAppView = document.getElementById('main-app-view');
+        const loginForm = document.getElementById('login-form');
+        const adminRegisterForm = document.getElementById('admin-register-form');
+        const loginError = document.getElementById('login-error');
+        const adminRegisterError = document.getElementById('admin-register-error');
+        const logoutButton = document.getElementById('logout-button');
+        const userEmailDisplay = document.getElementById('user-email-display');
+        const tabs = document.querySelectorAll('.tab-button');
+        const tabPanes = document.querySelectorAll('.tab-pane');
+        const addLeadForm = document.getElementById('add-lead-form');
+        
+        // --- NOTIFICAÇÕES ---
+        const notificationModal = document.getElementById('notification-modal');
+        const notificationMessage = document.getElementById('notification-message');
+        const notificationCloseBtn = document.getElementById('notification-close-btn');
+
+        notificationCloseBtn.addEventListener('click', () => {
+            notificationModal.classList.add('hidden');
+        });
+
+        function showNotification(message) {
+            notificationMessage.textContent = message;
+            notificationModal.classList.remove('hidden');
+        }
+
+        // --- VERIFICAÇÃO INICIAL DO SISTEMA ---
+        async function checkInitialSetup() {
+            if (!db) return;
+            try {
+                const usersCollectionRef = collection(db, `/artifacts/${appId}/public/data/users`);
+                const snapshot = await getDocs(usersCollectionRef);
+                if (snapshot.empty) {
+                    // Nenhum usuário existe, mostrar tela de cadastro de admin
+                    loginView.classList.add('hidden');
+                    adminRegisterView.classList.remove('hidden');
+                } else {
+                    // Usuários existem, mostrar tela de login normal
+                    adminRegisterView.classList.add('hidden');
+                    loginView.classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error("Erro ao verificar configuração inicial:", error);
+                showNotification("Erro ao iniciar o sistema. Verifique o console.");
+                loginView.classList.remove('hidden'); // Fallback para a tela de login
+            }
+        }
+
+
+        // --- LÓGICA DE AUTENTICAÇÃO ---
+        onAuthStateChanged(auth, async (user) => {
+            if (user && !user.isAnonymous) {
+                // A real user is signed in.
+                currentUser = user;
+                await fetchUserRole(user.uid);
+                setupUIForUser();
+                loginView.classList.add('hidden');
+                adminRegisterView.classList.add('hidden');
+                mainAppView.classList.remove('hidden');
+                userEmailDisplay.textContent = user.email;
+            } else {
+                // This block runs for ANONYMOUS users and NULL (logged out) users.
+                currentUser = null;
+                currentUserRole = null;
+                mainAppView.classList.add('hidden');
+
+                if (user) { // This means user is anonymous, and we have auth to check firestore.
+                   await checkInitialSetup();
+                } else { // This means user is null (logged out or initial state).
+                   // Default to login view. checkInitialSetup will overwrite this if needed once anon auth is ready.
+                   adminRegisterView.classList.add('hidden');
+                   loginView.classList.remove('hidden');
+                }
+            }
+        });
+        
+        // Autenticação inicial (custom token ou anônima)
+        const initialAuth = async () => {
+            if (!auth) return;
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch(e) {
+                console.error("Falha na autenticação inicial:", e);
+            }
+        };
+        initialAuth();
+
+        // Handler para o formulário de cadastro do ADMIN
+        adminRegisterForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('admin-email').value;
+            const password = document.getElementById('admin-password').value;
+            adminRegisterError.textContent = '';
+            try {
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                const user = userCredential.user;
+                await setDoc(doc(db, `/artifacts/${appId}/public/data/users`, user.uid), {
+                    uid: user.uid,
+                    email: user.email,
+                    role: 'lider' // Perfil de administrador
+                });
+                showNotification(`Administrador ${email} criado com sucesso!`);
+                // onAuthStateChanged will handle switching to the main app view.
+            } catch (error) {
+                console.error("Erro ao criar administrador:", error);
+                adminRegisterError.textContent = `Erro: ${error.message}`;
+            }
+        });
+
+        // Handler para o formulário de LOGIN
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = loginForm.email.value;
+            const password = loginForm.password.value;
+            loginError.textContent = '';
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+            } catch (error) {
+                console.error("Erro de login:", error.message);
+                loginError.textContent = 'Email ou senha inválidos.';
+            }
+        });
+
+        logoutButton.addEventListener('click', async () => {
+            await signOut(auth);
+        });
+
+        async function fetchUserRole(uid) {
+            const userDocSnap = await getDocs(query(collection(db, `/artifacts/${appId}/public/data/users`), where("uid", "==", uid)));
+            if (!userDocSnap.empty) {
+                currentUserRole = userDocSnap.docs[0].data().role;
+            } else {
+                console.log("Perfil do usuário não encontrado.");
+                currentUserRole = 'promotor'; // Perfil padrão de segurança
+            }
+        }
+
+        // --- CONTROLE DE UI POR PERFIL ---
+        function setupUIForUser() {
+            // Esconde todas as abas e botões primeiro
+            document.querySelectorAll('[id^="tab-"]').forEach(el => el.classList.add('hidden'));
+
+            if (!currentUserRole) return;
+
+            // Mostra abas com base no perfil
+            switch (currentUserRole) {
+                case 'lider':
+                case 'fdv':
+                    document.getElementById('tab-cadastro-btn').classList.remove('hidden');
+                    document.getElementById('tab-leads-btn').classList.remove('hidden');
+                    document.getElementById('tab-historico-btn').classList.remove('hidden');
+                    document.getElementById('tab-usuarios-btn').classList.remove('hidden');
+                    loadLeads();
+                    loadHistory();
+                    loadUsers();
+                    switchTab('cadastro');
+                    break;
+                case 'qg':
+                    document.getElementById('tab-cadastro-btn').classList.remove('hidden');
+                    document.getElementById('tab-leads-btn').classList.remove('hidden');
+                    loadLeads();
+                    switchTab('cadastro');
+                    break;
+                case 'promotor':
+                    document.getElementById('tab-cadastro-btn').classList.remove('hidden');
+                    switchTab('cadastro');
+                    break;
+            }
+        }
+        
+        // --- LÓGICA DAS ABAS ---
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+        });
+
+        function switchTab(tabName) {
+            tabs.forEach(tab => {
+                tab.classList.toggle('active', tab.dataset.tab === tabName);
+            });
+            tabPanes.forEach(pane => {
+                pane.classList.toggle('hidden', pane.id !== `${tabName}-tab`);
+            });
+        }
+
+        // --- LÓGICA DE LEADS ---
+        addLeadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const acao = document.getElementById('lead-acao').value.trim();
+            const nome = document.getElementById('lead-nome').value.trim();
+            const telefone = document.getElementById('lead-telefone').value.trim().replace(/\D/g, ''); // Remove non-digits
+            const email = document.getElementById('lead-email').value.trim();
+            const cpf = document.getElementById('lead-cpf').value.trim().replace(/\D/g, '');
+            const curso = document.getElementById('lead-curso').value.trim();
+
+            if (!acao || !nome || !telefone) {
+                showNotification("Preencha os campos obrigatórios: Ação, Nome e Telefone.");
+                return;
+            }
+
+            try {
+                // Verificar telefone duplicado
+                const phoneQuery = query(collection(db, `/artifacts/${appId}/public/data/leads`), where("telefone", "==", telefone));
+                const phoneSnapshot = await getDocs(phoneQuery);
+                if (!phoneSnapshot.empty) {
+                    showNotification("Este telefone já está cadastrado no sistema.");
+                    return;
+                }
+
+                // Verificar CPF duplicado (se informado)
+                if (cpf) {
+                    const cpfQuery = query(collection(db, `/artifacts/${appId}/public/data/leads`), where("cpf", "==", cpf));
+                    const cpfSnapshot = await getDocs(cpfQuery);
+                    if (!cpfSnapshot.empty) {
+                        showNotification("Este CPF já está cadastrado no sistema.");
+                        return;
+                    }
+                }
+                
+                const promotorData = (await getDocs(query(collection(db, `/artifacts/${appId}/public/data/users`), where("uid", "==", currentUser.uid)))).docs[0]?.data();
+
+                // Adicionar lead
+                await addDoc(collection(db, `/artifacts/${appId}/public/data/leads`), {
+                    acao,
+                    nome,
+                    telefone,
+                    email: email || '',
+                    cpf: cpf || '',
+                    curso: curso || '',
+                    converted: false,
+                    createdAt: serverTimestamp(),
+                    promotorId: currentUser.uid,
+                    promotorName: promotorData?.email || currentUser.email // Usa o nome/email do promotor
+                });
+
+                showNotification("Lead cadastrado com sucesso!");
+                addLeadForm.reset();
+
+            } catch (error) {
+                console.error("Erro ao adicionar lead:", error);
+                showNotification("Ocorreu um erro ao salvar o lead.");
+            }
+        });
+
+        function loadLeads() {
+            const leadsCollection = collection(db, `/artifacts/${appId}/public/data/leads`);
+            onSnapshot(leadsCollection, (snapshot) => {
+                const leadsList = document.getElementById('leads-list');
+                leadsList.innerHTML = ''; // Limpa a lista
+                if (snapshot.empty) {
+                    leadsList.innerHTML = `<tr><td colspan="5" class="text-center py-4">Nenhum lead encontrado.</td></tr>`;
+                    return;
+                }
+                snapshot.docs.forEach(doc => {
+                    const lead = doc.data();
+                    const leadId = doc.id;
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td class="py-3 px-4">${lead.nome}</td>
+                        <td class="py-3 px-4">${lead.telefone}</td>
+                        <td class="py-3 px-4">${lead.acao}</td>
+                        <td class="py-3 px-4 text-center">
+                            <input type="checkbox" class="h-5 w-5 text-blue-600 rounded focus:ring-blue-500 conversion-toggle" data-id="${leadId}" ${lead.converted ? 'checked' : ''}>
+                        </td>
+                        <td class="py-3 px-4 text-center">
+                            <a href="https://wa.me/55${lead.telefone}" target="_blank" class="text-green-500 hover:text-green-700 text-xl">
+                                <i class="fab fa-whatsapp"></i>
+                            </a>
+                        </td>
+                    `;
+                    leadsList.appendChild(tr);
+                });
+
+                // Adiciona listeners para os toggles de conversão
+                document.querySelectorAll('.conversion-toggle').forEach(toggle => {
+                    toggle.addEventListener('change', async (e) => {
+                        const docId = e.target.dataset.id;
+                        const isConverted = e.target.checked;
+                        const leadDocRef = doc(db, `/artifacts/${appId}/public/data/leads`, docId);
+                        try {
+                            await updateDoc(leadDocRef, { converted: isConverted });
+                        } catch (error) {
+                            console.error("Erro ao atualizar status:", error);
+                            showNotification("Falha ao atualizar o status do lead.");
+                        }
+                    });
+                });
+            });
+        }
+        
+        // --- LÓGICA DE HISTÓRICO E FILTROS ---
+        function loadHistory() {
+            const leadsCollection = collection(db, `/artifacts/${appId}/public/data/leads`);
+            onSnapshot(leadsCollection, (snapshot) => {
+                allLeads = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderHistory();
+            });
+
+            // Adiciona listeners aos filtros
+            ['filter-acao', 'filter-promotor', 'filter-data', 'filter-status'].forEach(id => {
+                document.getElementById(id).addEventListener('input', renderHistory);
+            });
+        }
+        
+        function renderHistory() {
+            const historicoList = document.getElementById('historico-list');
+            historicoList.innerHTML = '';
+
+            const acaoFilter = document.getElementById('filter-acao').value.toLowerCase();
+            const promotorFilter = document.getElementById('filter-promotor').value.toLowerCase();
+            const dataFilter = document.getElementById('filter-data').value;
+            const statusFilter = document.getElementById('filter-status').value;
+
+            const filteredLeads = allLeads.filter(lead => {
+                const leadDate = lead.createdAt?.toDate().toISOString().split('T')[0];
+                const matchAcao = lead.acao.toLowerCase().includes(acaoFilter);
+                const matchPromotor = (lead.promotorName || "").toLowerCase().includes(promotorFilter);
+                const matchData = !dataFilter || leadDate === dataFilter;
+                const matchStatus = statusFilter === "" || String(lead.converted) === statusFilter;
+                return matchAcao && matchPromotor && matchData && matchStatus;
+            });
+            
+            if (filteredLeads.length === 0) {
+                 historicoList.innerHTML = `<tr><td colspan="6" class="text-center py-4">Nenhum registro encontrado com os filtros aplicados.</td></tr>`;
+                 return;
+            }
+
+            filteredLeads.forEach(lead => {
+                const tr = document.createElement('tr');
+                const leadDate = lead.createdAt ? lead.createdAt.toDate().toLocaleDateString('pt-BR') : 'N/A';
+                tr.innerHTML = `
+                    <td class="py-3 px-4 text-sm">${leadDate}</td>
+                    <td class="py-3 px-4 text-sm">${lead.nome}</td>
+                    <td class="py-3 px-4 text-sm">${lead.telefone}</td>
+                    <td class="py-3 px-4 text-sm">${lead.acao}</td>
+                    <td class="py-3 px-4 text-sm">${lead.promotorName || 'N/A'}</td>
+                    <td class="py-3 px-4 text-center text-sm">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${lead.converted ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                            ${lead.converted ? 'Convertido' : 'Não Convertido'}
+                        </span>
+                    </td>
+                `;
+                historicoList.appendChild(tr);
+            });
+        }
+
+        // --- LÓGICA DE USUÁRIOS ---
+        const addUserForm = document.getElementById('add-user-form');
+        addUserForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('new-user-email').value;
+            const password = document.getElementById('new-user-password').value;
+            const role = document.getElementById('new-user-role').value;
+
+            if (!secondaryAuth) {
+                showNotification("Erro de inicialização. Não é possível criar usuário.");
+                return;
+            }
+
+            try {
+                // Usa a instância secundária do Auth para não deslogar o admin
+                const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+                const user = userCredential.user;
+
+                // Salva o perfil do usuário no Firestore
+                await setDoc(doc(db, `/artifacts/${appId}/public/data/users`, user.uid), {
+                    uid: user.uid,
+                    email: user.email,
+                    role: role
+                });
+                
+                // O admin permanece logado. A sessão principal não é afetada.
+                showNotification(`Usuário ${email} criado com o perfil ${role}.`);
+                addUserForm.reset();
+
+            } catch (error) {
+                console.error("Erro ao criar usuário:", error);
+                showNotification(`Erro: ${error.message}`);
+            }
+        });
+
+        function loadUsers() {
+            const usersCollection = collection(db, `/artifacts/${appId}/public/data/users`);
+            onSnapshot(usersCollection, (snapshot) => {
+                const usersList = document.getElementById('users-list');
+                usersList.innerHTML = '';
+                 if (snapshot.empty) {
+                    usersList.innerHTML = `<tr><td colspan="2" class="text-center py-4">Nenhum usuário encontrado.</td></tr>`;
+                    return;
+                }
+                snapshot.docs.forEach(doc => {
+                    const user = doc.data();
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td class="py-3 px-4">${user.email}</td>
+                        <td class="py-3 px-4">${user.role.charAt(0).toUpperCase() + user.role.slice(1)}</td>
+                    `;
+                    usersList.appendChild(tr);
+                });
+            });
+        }
+        
+    </script>
+</body>
+</html>
+
