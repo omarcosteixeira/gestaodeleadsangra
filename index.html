@@ -1,913 +1,754 @@
-// Bibliotecas do React e Firebase
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { initializeApp } from 'firebase/app';
-import { 
-  getAuth, 
-  signInAnonymously, 
-  signInWithCustomToken, 
-  onAuthStateChanged,
-  createUserWithEmailAndPassword, // Adicionado para Cadastro
-  signInWithEmailAndPassword,     // Adicionado para Login
-  signOut                         // Adicionado para Sair
-} from 'firebase/auth';
-import { getFirestore, doc, collection, query, where, getDocs, addDoc, updateDoc, onSnapshot, serverTimestamp, setLogLevel } from 'firebase/firestore';
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestão de Leads Angra</title>
+    <!-- Tailwind CSS CDN para estilos responsivos e modernos -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Estilos globais para a fonte e transições */
+        body { font-family: 'Inter', sans-serif; }
+        .transition-all { transition: all 0.3s ease-in-out; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
 
-// Configuração do Tailwind CSS (assumido) e ícones (lucide-react)
-import { Users, CheckCircle, Percent, PlusCircle, List, BarChart, XCircle, Search, Save, MessageSquare, User, Calendar, Tag, Smartphone, Mail, Globe, Hash, LogIn, UserPlus } from 'lucide-react';
+    <!-- Container Principal do App -->
+    <div id="app-container" class="hidden">
+        
+        <!-- Cabeçalho e Navegação -->
+        <header class="bg-blue-800 text-white shadow-lg sticky top-0 z-10">
+            <div class="max-w-7xl mx-auto p-4 flex flex-col md:flex-row justify-between items-center">
+                <h1 class="text-2xl font-bold tracking-tight mb-2 md:mb-0 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="inline-block mr-2 h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="18" x2="12" y2="22"/></svg>
+                    Gestão de Leads Angra
+                </h1>
+                <nav class="flex space-x-2 sm:space-x-4">
+                    <button id="nav-dashboard" class="nav-item flex items-center space-x-1 p-2 rounded-lg transition-all text-sm bg-blue-600 text-white font-semibold" data-view="dashboard">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                        <span class="hidden sm:inline">Painel Principal</span>
+                    </button>
+                    <button id="nav-cadastro" class="nav-item flex items-center space-x-1 p-2 rounded-lg transition-all text-sm text-blue-200 hover:bg-blue-700 hover:text-white" data-view="cadastro">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        <span class="hidden sm:inline">Cadastrar Lead</span>
+                    </button>
+                    <button id="nav-historico" class="nav-item flex items-center space-x-1 p-2 rounded-lg transition-all text-sm text-blue-200 hover:bg-blue-700 hover:text-white" data-view="historico">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="10" y1="10" x2="21" y2="21"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7"/></svg>
+                        <span class="hidden sm:inline">Histórico / Acesso</span>
+                    </button>
+                </nav>
+                <div class="flex items-center space-x-4 mt-2 md:mt-0">
+                    <div id="promotor-id-display" class="text-sm p-2 bg-blue-700 rounded-lg text-blue-200 shadow-inner hidden lg:block">
+                        <!-- O ID do promotor será injetado aqui -->
+                    </div>
+                    <button id="btn-logout" class="p-2 bg-red-500 hover:bg-red-600 text-white rounded-lg shadow-md transition-all text-sm flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                        Sair
+                    </button>
+                </div>
+            </div>
+        </header>
 
-// Variáveis globais do ambiente (Canvas)
-// Configuração do Firebase fornecida pelo usuário como fallback, caso as variáveis de ambiente não estejam definidas.
-const USER_FALLBACK_FIREBASE_CONFIG = {
-    apiKey: "AIzaSyAY-rGNBHMsT5QqHHvNsZ9VzB3kyHtYPks",
-    authDomain: "gestaodeleadsangra.firebaseapp.com",
-    projectId: "gestaodeleadsangra",
-    storageBucket: "gestaodeleadsangra.firebasestorage.app",
-    messagingSenderId: "706992622509",
-    appId: "1:706992622509:web:b091d4e27920d7d85e2f24"
-};
+        <!-- Conteúdo Principal -->
+        <main class="flex-grow p-4 md:p-8">
+            <div class="max-w-7xl mx-auto">
+                <div id="view-dashboard" class="view-content space-y-8"></div>
+                <div id="view-cadastro" class="view-content space-y-8 hidden"></div>
+                <div id="view-historico" class="view-content space-y-8 hidden"></div>
+            </div>
+        </main>
 
-// Prioriza as variáveis injetadas pelo ambiente (Canvas)
-const firebaseConfig = typeof __firebase_config !== 'undefined' && __firebase_config.length > 2 
-    ? JSON.parse(__firebase_config) 
-    : USER_FALLBACK_FIREBASE_CONFIG;
+        <!-- Rodapé -->
+        <footer class="bg-gray-900 text-white p-4 mt-8">
+            <div class="max-w-7xl mx-auto text-center text-sm text-gray-400">
+                Sistema de Gestão de Leads Angra | ID do Aplicativo: gestaodeleadsangra
+            </div>
+        </footer>
+    </div>
     
-const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.projectId; // Usando projectId como fallback
-const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+    <!-- Tela de Autenticação (Login/Cadastro) -->
+    <div id="auth-screen" class="flex justify-center items-center h-screen bg-gray-100 p-4">
+        <div id="auth-card" class="w-full max-w-md bg-white p-8 rounded-xl shadow-2xl border border-gray-200">
+            <!-- Conteúdo da autenticação será injetado aqui -->
+        </div>
+    </div>
 
-// Caminho da coleção (pública para que todos os promotores vejam todos os leads)
-const COLLECTION_PATH = `artifacts/${appId}/public/data/leads`;
+    <!-- Firebase e JS Logic -->
+    <script type="module">
+        // Importações do Firebase via CDN
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            onAuthStateChanged, 
+            createUserWithEmailAndPassword, 
+            signInWithEmailAndPassword, 
+            signOut 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            collection, 
+            query, 
+            addDoc, 
+            updateDoc, 
+            onSnapshot, 
+            serverTimestamp, 
+            doc, 
+            setLogLevel 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-// Helper para formatação do CPF (apenas números)
-const formatCpf = (cpf) => cpf ? cpf.replace(/\D/g, '') : '';
-// Helper para formatação do Telefone (apenas números)
-const formatPhone = (phone) => phone ? phone.replace(/\D/g, '') : '';
+        // NOTA IMPORTANTE SOBRE PERMISSÕES:
+        // Se você está recebendo o erro "Missing or insufficient permissions", 
+        // você PRECISA atualizar as Regras de Segurança do seu Firestore.
+        // Consulte o arquivo REGRAS_DE_SEGURANCA.md para o código de regras correto.
+        
+        // Configuração do Firebase (Hardcoded para GitHub Pages)
+        const firebaseConfig = {
+            apiKey: "AIzaSyAY-rGNBHMsT5QqHHvNsZ9VzB3kyHtYPks",
+            authDomain: "gestaodeleadsangra.firebaseapp.com",
+            projectId: "gestaodeleadsangra",
+            storageBucket: "gestaodeleadsangra.firebasestorage.app",
+            messagingSenderId: "706992622509",
+            appId: "1:706992622509:web:b091d4e27920d7d85e2f24"
+        };
+        const appId = firebaseConfig.projectId; 
+        const COLLECTION_PATH = `artifacts/${appId}/public/data/leads`;
 
-// --- Componente Principal da Aplicação ---
-const App = () => {
-  const [db, setDb] = useState(null);
-  const [auth, setAuth] = useState(null);
-  const [userId, setUserId] = useState(null);
-  const [fullUserId, setFullUserId] = useState(null); // ID completo para exibição
-  const [isLoading, setIsLoading] = useState(true);
-  const [leads, setLeads] = useState([]);
-  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'cadastro', 'historico'
-  const [isAuthenticated, setIsAuthenticated] = useState(false); // Novo estado de autenticação
+        // Variáveis de Estado Global
+        let db;
+        let auth;
+        let currentUserId = null;
+        let fullUserId = null;
+        let leadsData = [];
+        let currentView = 'dashboard';
 
-  // 1. Inicialização do Firebase e Autenticação
-  useEffect(() => {
-    try {
-      // Ativa o log de debug do Firestore
-      setLogLevel('debug');
-      const app = initializeApp(firebaseConfig);
-      const firestore = getFirestore(app);
-      const firebaseAuth = getAuth(app);
+        // --- Helpers de Formatação e UI ---
 
-      setDb(firestore);
-      setAuth(firebaseAuth);
+        const formatCpf = (cpf) => cpf ? cpf.replace(/\D/g, '') : '';
+        const formatPhone = (phone) => phone ? phone.replace(/\D/g, '') : '';
 
-      const unsubscribe = onAuthStateChanged(firebaseAuth, async (user) => {
-        if (user) {
-          // Usuário autenticado (via login ou token inicial)
-          setUserId(user.uid);
-          setFullUserId(user.uid);
-          setIsAuthenticated(true);
-        } else {
-          // Se não houver usuário logado, tenta o login silencioso via token inicial (ambiente Canvas)
-          if (initialAuthToken) {
-              try {
-                  const userCredential = await signInWithCustomToken(firebaseAuth, initialAuthToken);
-                  setUserId(userCredential.user.uid);
-                  setFullUserId(userCredential.user.uid);
-                  setIsAuthenticated(true);
-              } catch(error) {
-                  // Se o token falhar, ou não existir, exige login/cadastro
-                  console.warn("Falha no login com token inicial ou token ausente. Exigindo login/cadastro.");
-                  setIsAuthenticated(false);
-              }
-          } else {
-              // Não há usuário e nem token inicial. Exige login/cadastro.
-              setIsAuthenticated(false);
-          }
+        const formatDate = (timestamp) => {
+            if (!timestamp) return 'N/A';
+            const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+            return date.toLocaleDateString('pt-BR');
+        };
+
+        const generateIcon = (svgPath) => `
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 inline-block" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${svgPath}</svg>
+        `;
+
+        const ICONS = {
+            USERS: generateIcon('<path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/>'),
+            CHECK: generateIcon('<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>'),
+            PERCENT: generateIcon('<line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>'),
+            USER: generateIcon('<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'),
+            TAG: generateIcon('<path d="M20.59 13.41l-7.15 7.15a2.12 2.12 0 0 1-3-.01L3 13.25V4a1 1 0 0 1 1-1h9.25l7.34 7.34a2.12 2.12 0 0 1 0 3z"/><line x1="10" y1="10" x2="10.01" y2="10"/>'),
+            PHONE: generateIcon('<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.08 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>'),
+            MAIL: generateIcon('<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>'),
+            LIST: generateIcon('<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>'),
+            SEARCH: generateIcon('<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>'),
+            CALENDAR: generateIcon('<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>'),
+            HASH: generateIcon('<line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/>')
+        };
+
+
+        // --- Funções de Navegação e UI ---
+
+        function renderView(viewName) {
+            const views = document.querySelectorAll('.view-content');
+            views.forEach(view => view.classList.add('hidden'));
+            
+            const targetView = document.getElementById(`view-${viewName}`);
+            if (targetView) targetView.classList.remove('hidden');
+
+            const navItems = document.querySelectorAll('.nav-item');
+            navItems.forEach(item => {
+                item.classList.remove('bg-blue-600', 'text-white', 'font-semibold', 'hover:bg-blue-700');
+                item.classList.add('text-blue-200', 'hover:bg-blue-700', 'hover:text-white');
+                if (item.dataset.view === viewName) {
+                    item.classList.add('bg-blue-600', 'text-white', 'font-semibold');
+                    item.classList.remove('text-blue-200');
+                }
+            });
+            currentView = viewName;
+
+            // Renderiza o conteúdo específico da view
+            if (viewName === 'dashboard') renderDashboard();
+            if (viewName === 'historico') renderHistory();
         }
-        setIsLoading(false);
-      });
 
-      return () => unsubscribe();
-    } catch (error) {
-      console.error("Erro na inicialização do Firebase:", error);
-      setIsLoading(false);
-    }
-  }, []);
+        // --- 1. Inicialização do Firebase e Autenticação ---
 
-  // 2. Listener de Leads em Tempo Real (onSnapshot)
-  useEffect(() => {
-    if (db && userId) {
-      const leadsCollectionRef = collection(db, COLLECTION_PATH);
-      const q = query(leadsCollectionRef);
+        function initApp() {
+            try {
+                // setLogLevel('debug'); // Descomente para ver logs do Firebase
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
 
-      // onSnapshot: mantém a lista de leads atualizada em tempo real
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const leadsData = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setLeads(leadsData);
-      }, (error) => {
-        console.error("Erro ao ouvir leads:", error);
-      });
+                // Listener de autenticação
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        currentUserId = user.uid;
+                        fullUserId = user.uid;
+                        
+                        document.getElementById('auth-screen').classList.add('hidden');
+                        document.getElementById('app-container').classList.remove('hidden');
+                        
+                        document.getElementById('promotor-id-display').innerHTML = `
+                            ${ICONS.USER}
+                            Promotor ID: <span class="font-mono text-xs">${fullUserId.substring(0, 8)}...</span>
+                        `;
+                        
+                        // Inicia o listener de leads
+                        setupLeadsListener();
+                        renderView(currentView);
+                    } else {
+                        currentUserId = null;
+                        fullUserId = null;
+                        document.getElementById('app-container').classList.add('hidden');
+                        document.getElementById('auth-screen').classList.remove('hidden');
+                        renderAuthScreen(true); // Sempre começa no login
+                    }
+                });
 
-      return () => unsubscribe();
-    }
-  }, [db, userId]);
+                // Adiciona listeners de navegação
+                document.querySelectorAll('.nav-item').forEach(btn => {
+                    btn.addEventListener('click', (e) => renderView(e.currentTarget.dataset.view));
+                });
+                document.getElementById('btn-logout').addEventListener('click', handleLogout);
 
-  // Função para mudar a visualização
-  const changeView = (view) => setCurrentView(view);
-  
-  // Função para lidar com o logout
-  const handleSignOut = useCallback(async () => {
-    if (auth) {
-      try {
-        await signOut(auth);
-        setUserId(null);
-        setFullUserId(null);
-        setIsAuthenticated(false);
-        setCurrentView('dashboard'); // Volta para a dashboard (que vai mostrar a tela de login)
-      } catch (error) {
-        console.error("Erro ao fazer logout:", error);
-      }
-    }
-  }, [auth]);
+            } catch (error) {
+                console.error("Erro na inicialização do Firebase:", error);
+                document.getElementById('auth-card').innerHTML = `<div class="p-4 bg-red-100 text-red-700 rounded-lg">Erro fatal ao carregar o Firebase. Verifique sua conexão e console.</div>`;
+            }
+        }
 
-  // Se estiver carregando, mostra o indicador
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-screen bg-gray-50">
-        <div className="text-xl font-medium text-blue-600">Carregando Sistema de Gestão de Leads...</div>
-      </div>
-    );
-  }
-
-  // Se não estiver autenticado, mostra a tela de Login/Cadastro
-  if (!isAuthenticated && !isLoading) {
-    return <AuthScreen auth={auth} />;
-  }
-
-  // --- Estrutura da UI Principal (Autenticado) ---
-  return (
-    <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
-      <Header 
-        changeView={changeView} 
-        currentView={currentView} 
-        fullUserId={fullUserId} 
-        onSignOut={handleSignOut} 
-      />
-      <main className="flex-grow p-4 md:p-8">
-        <div className="max-w-7xl mx-auto">
-          {currentView === 'dashboard' && <Dashboard leads={leads} userId={userId} />}
-          {currentView === 'cadastro' && <LeadRegistration db={db} userId={userId} fullUserId={fullUserId} leads={leads} />}
-          {currentView === 'historico' && <LeadHistory db={db} leads={leads} />}
-        </div>
-      </main>
-      <Footer />
-    </div>
-  );
-};
-
-// --- Componente de Autenticação (Login/Cadastro) ---
-const AuthScreen = ({ auth }) => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isLogin, setIsLogin] = useState(true); // true = Login, false = Cadastro
-  const [errorMessage, setErrorMessage] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
-
-  const handleAuth = async (e) => {
-    e.preventDefault();
-    setErrorMessage('');
-    setIsProcessing(true);
-
-    if (!email || !password) {
-        setErrorMessage('Email e senha são obrigatórios.');
-        setIsProcessing(false);
-        return;
-    }
-
-    try {
-      if (isLogin) {
-        await signInWithEmailAndPassword(auth, email, password);
-      } else {
-        await createUserWithEmailAndPassword(auth, email, password);
-      }
-      // O App component detectará a mudança de estado e renderizará o dashboard
-    } catch (error) {
-      console.error("Erro de autenticação:", error);
-      let msg = 'Ocorreu um erro na autenticação. Verifique suas credenciais.';
-      
-      // Mapeamento de erros comuns do Firebase Auth (em Português)
-      if (error.code === 'auth/invalid-email') {
-        msg = 'O formato do email é inválido.';
-      } else if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-        msg = 'Email ou senha incorretos.';
-      } else if (error.code === 'auth/email-already-in-use') {
-        msg = 'Este email já está cadastrado. Por favor, faça login.';
-      } else if (error.code === 'auth/weak-password') {
-        msg = 'A senha deve ter pelo menos 6 caracteres.';
-      }
-      
-      setErrorMessage(msg);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const AuthInput = ({ label, type, value, onChange }) => (
-    <div>
-        <label className="block text-sm font-medium text-gray-700">{label}</label>
-        <input
-            type={type}
-            value={value}
-            onChange={onChange}
-            required
-            className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-        />
-    </div>
-  );
-
-  return (
-    <div className="flex justify-center items-center h-screen bg-gray-100 p-4">
-      <div className="w-full max-w-md bg-white p-8 rounded-xl shadow-2xl border border-gray-200">
-        <h2 className="text-3xl font-extrabold text-gray-900 text-center mb-6 border-b pb-2 flex items-center justify-center space-x-2">
-          {isLogin ? <LogIn className="h-7 w-7 text-blue-600" /> : <UserPlus className="h-7 w-7 text-blue-600" />}
-          <span>{isLogin ? 'Acesso ao Sistema' : 'Cadastre-se'}</span>
-        </h2>
-        
-        {errorMessage && (
-          <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-center font-medium border border-red-300">
-            {errorMessage}
-          </div>
-        )}
-
-        <form onSubmit={handleAuth} className="space-y-4">
-          <AuthInput
-            label="Email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-          <AuthInput
-            label="Senha"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-
-          <button
-            type="submit"
-            disabled={isProcessing}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition duration-200 transform hover:scale-[1.01] flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isProcessing ? (
-                <>
-                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        function renderAuthScreen(isLogin) {
+            const authCard = document.getElementById('auth-card');
+            authCard.innerHTML = `
+                <h2 class="text-3xl font-extrabold text-gray-900 text-center mb-6 border-b pb-2 flex items-center justify-center space-x-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        ${isLogin ? '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>' : '<path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/>'}
                     </svg>
-                    <span>{isLogin ? 'Entrando...' : 'Cadastrando...'}</span>
-                </>
-            ) : (
-                <span>{isLogin ? 'Entrar' : 'Cadastrar'}</span>
-            )}
-          </button>
-        </form>
+                    <span>${isLogin ? 'Acesso ao Sistema' : 'Cadastre-se'}</span>
+                </h2>
+                
+                <div id="auth-message" class="hidden mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-center font-medium border border-red-300"></div>
 
-        <p className="mt-6 text-center text-sm text-gray-600">
-          {isLogin ? "Não tem uma conta?" : "Já tem uma conta?"}
-          <button
-            onClick={() => {
-                setIsLogin(!isLogin);
-                setErrorMessage('');
-                setEmail('');
-                setPassword('');
-            }}
-            className="ml-2 font-semibold text-blue-600 hover:text-blue-800 transition duration-150"
-          >
-            {isLogin ? "Criar conta" : "Fazer Login"}
-          </button>
-        </p>
-      </div>
-    </div>
-  );
-};
+                <form id="auth-form" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Email</label>
+                        <input type="email" id="auth-email" required class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-blue-500 focus:border-blue-500 sm:text-sm"/>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Senha</label>
+                        <input type="password" id="auth-password" required class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-blue-500 focus:border-blue-500 sm:text-sm"/>
+                    </div>
 
-// --- Componente de Cabeçalho (Header) ---
-const Header = ({ changeView, currentView, fullUserId, onSignOut }) => (
-  <header className="bg-blue-800 text-white shadow-lg sticky top-0 z-10">
-    <div className="max-w-7xl mx-auto p-4 flex flex-col md:flex-row justify-between items-center">
-      <h1 className="text-2xl font-bold tracking-tight mb-2 md:mb-0">
-        <Globe className="inline-block mr-2 h-6 w-6" />
-        Gestão de Leads Angra
-      </h1>
-      <nav className="flex space-x-2 sm:space-x-4">
-        <NavItem 
-          icon={BarChart} 
-          label="Painel Principal" 
-          view="dashboard" 
-          currentView={currentView} 
-          onClick={() => changeView('dashboard')} 
-        />
-        <NavItem 
-          icon={PlusCircle} 
-          label="Cadastrar Lead" 
-          view="cadastro" 
-          currentView={currentView} 
-          onClick={() => changeView('cadastro')} 
-        />
-        <NavItem 
-          icon={List} 
-          label="Histórico / Acesso" 
-          view="historico" 
-          currentView={currentView} 
-          onClick={() => changeView('historico')} 
-        />
-      </nav>
-      <div className="flex items-center space-x-4 mt-2 md:mt-0">
-        {fullUserId && (
-          <div className="text-sm p-2 bg-blue-700 rounded-lg text-blue-200 shadow-inner hidden lg:block">
-            <User className="inline-block h-4 w-4 mr-1" />
-            Promotor ID: <span className="font-mono text-xs">{fullUserId}</span>
-          </div>
-        )}
-        <button 
-          onClick={onSignOut}
-          className="p-2 bg-red-500 hover:bg-red-600 text-white rounded-lg shadow-md transition duration-200 text-sm flex items-center"
-        >
-          <XCircle className="h-4 w-4 mr-1" />
-          Sair
-        </button>
-      </div>
-    </div>
-  </header>
-);
+                    <button type="submit" id="btn-auth-submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-all flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <span>${isLogin ? 'Entrar' : 'Cadastrar'}</span>
+                    </button>
+                </form>
 
-// Item de navegação
-const NavItem = ({ icon: Icon, label, view, currentView, onClick }) => {
-  const isActive = view === currentView;
-  const classes = isActive 
-    ? "bg-blue-600 text-white shadow-md font-semibold" 
-    : "text-blue-200 hover:bg-blue-700 hover:text-white";
-  
-  return (
-    <button
-      onClick={onClick}
-      className={`flex items-center space-x-1 p-2 rounded-lg transition duration-200 text-sm ${classes}`}
-    >
-      <Icon className="h-4 w-4" />
-      <span className="hidden sm:inline">{label}</span>
-    </button>
-  );
-};
+                <p class="mt-6 text-center text-sm text-gray-600">
+                    ${isLogin ? "Não tem uma conta?" : "Já tem uma conta?"}
+                    <button id="btn-toggle-auth" class="ml-2 font-semibold text-blue-600 hover:text-blue-800 transition-all">
+                        ${isLogin ? "Criar conta" : "Fazer Login"}
+                    </button>
+                </p>
+            `;
+
+            document.getElementById('btn-toggle-auth').addEventListener('click', () => renderAuthScreen(!isLogin));
+            document.getElementById('auth-form').addEventListener('submit', (e) => handleAuth(e, isLogin));
+        }
+
+        async function handleAuth(e, isLogin) {
+            e.preventDefault();
+            const email = document.getElementById('auth-email').value;
+            const password = document.getElementById('auth-password').value;
+            const btn = document.getElementById('btn-auth-submit');
+            const msgEl = document.getElementById('auth-message');
+            
+            msgEl.classList.add('hidden');
+            btn.disabled = true;
+            btn.innerHTML = `<svg class="animate-spin h-5 w-5 mr-3 text-white" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> <span>${isLogin ? 'Entrando...' : 'Cadastrando...'}</span>`;
+
+            try {
+                if (isLogin) {
+                    await signInWithEmailAndPassword(auth, email, password);
+                } else {
+                    await createUserWithEmailAndPassword(auth, email, password);
+                }
+            } catch (error) {
+                let msg = 'Ocorreu um erro na autenticação. Verifique suas credenciais.';
+                if (error.code === 'auth/invalid-email') msg = 'O formato do email é inválido.';
+                else if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') msg = 'Email ou senha incorretos.';
+                else if (error.code === 'auth/email-already-in-use') msg = 'Este email já está cadastrado. Por favor, faça login.';
+                else if (error.code === 'auth/weak-password') msg = 'A senha deve ter pelo menos 6 caracteres.';
+                
+                msgEl.textContent = msg;
+                msgEl.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<span>${isLogin ? 'Entrar' : 'Cadastrar'}</span>`;
+            }
+        }
+
+        function handleLogout() {
+            if (auth) {
+                signOut(auth).catch(error => console.error("Erro ao fazer logout:", error));
+            }
+        }
 
 
-// --- Componente do Painel Principal (Dashboard) ---
-const Dashboard = ({ leads, userId }) => {
-  // Cálculos de estatísticas (useMemo para otimização)
-  const stats = useMemo(() => {
-    const totalLeads = leads.length;
-    const convertedLeads = leads.filter(lead => lead.converted).length;
-    const userLeads = leads.filter(lead => lead.promotorId === userId).length;
-    const conversionRate = totalLeads > 0 
-      ? ((convertedLeads / totalLeads) * 100).toFixed(1) 
-      : 0.0;
+        // --- 2. Listener de Leads (onSnapshot) ---
 
-    return { totalLeads, convertedLeads, userLeads, conversionRate };
-  }, [leads, userId]);
+        function setupLeadsListener() {
+            if (!db) return;
 
-  return (
-    <div className="space-y-8">
-      <h2 className="text-3xl font-extrabold text-gray-900 border-b-4 border-blue-500 pb-2 mb-4">Painel Principal - Visão Geral</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard 
-          title="Total de Leads Cadastrados" 
-          value={stats.totalLeads} 
-          icon={Users} 
-          color="bg-blue-500" 
-        />
-        <StatCard 
-          title="Leads Convertidos" 
-          value={stats.convertedLeads} 
-          icon={CheckCircle} 
-          color="bg-green-500" 
-        />
-        <StatCard 
-          title="Taxa de Conversão Geral" 
-          value={`${stats.conversionRate}%`} 
-          icon={Percent} 
-          color="bg-purple-500" 
-        />
-        <StatCard 
-          title="Seus Leads Cadastrados" 
-          value={stats.userLeads} 
-          icon={User} 
-          color="bg-yellow-500" 
-        />
-      </div>
-      
-      <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
-        <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-          <BarChart className="h-5 w-5 mr-2 text-blue-500" />
-          Visão Rápida
-        </h3>
-        <p className="text-gray-600">
-          O Painel Principal oferece uma visão em tempo real do volume de leads e do desempenho de conversão da equipe. 
-          Use a aba **Cadastrar Lead** para adicionar novos contatos e a **Histórico / Acesso** para gerenciar e filtrar os resultados.
-        </p>
-      </div>
-    </div>
-  );
-};
+            const leadsCollectionRef = collection(db, COLLECTION_PATH);
+            const q = query(leadsCollectionRef);
 
-// Cartão de Estatística
-const StatCard = ({ title, value, icon: Icon, color }) => (
-  <div className={`p-5 rounded-xl shadow-xl border-l-4 ${color.replace('bg-', 'border-')} bg-white transition duration-300 hover:shadow-2xl`}>
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="text-sm font-medium text-gray-500 truncate">{title}</p>
-        <p className="mt-1 text-3xl font-bold text-gray-900">{value}</p>
-      </div>
-      <div className={`p-3 rounded-full ${color} bg-opacity-10`}>
-        <Icon className={`h-6 w-6 text-opacity-80`} style={{ color: color.replace('bg-', 'text-') }} />
-      </div>
-    </div>
-  </div>
-);
+            onSnapshot(q, (snapshot) => {
+                leadsData = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                // Re-renderiza a view atual com os novos dados
+                if (currentUserId) renderView(currentView); 
+            }, (error) => {
+                console.error("Erro ao ouvir leads:", error);
+                // NOTA: Se o erro for de permissão (Missing or insufficient permissions), 
+                // ele não será corrigido aqui no código JS, mas sim no console do Firebase.
+            });
+        }
 
-// --- Componente de Cadastro de Lead ---
-const LeadRegistration = ({ db, userId, fullUserId, leads }) => {
-  const [formData, setFormData] = useState({
-    acao: '', nome: '', telefone: '', email: '', cpf: '', cursoInteresse: ''
-  });
-  const [message, setMessage] = useState(null);
-  const [isError, setIsError] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+        // --- 3. Dashboard ---
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    if (message) setMessage(null); // Limpa a mensagem ao começar a digitar
-  };
+        function renderDashboard() {
+            const stats = calculateStats();
+            const dashboardEl = document.getElementById('view-dashboard');
+            dashboardEl.innerHTML = `
+                <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-blue-500 pb-2 mb-4">Painel Principal - Visão Geral</h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    ${renderStatCard("Total de Leads Cadastrados", stats.totalLeads, ICONS.USERS, "bg-blue-500")}
+                    ${renderStatCard("Leads Convertidos", stats.convertedLeads, ICONS.CHECK, "bg-green-500")}
+                    ${renderStatCard("Taxa de Conversão Geral", `${stats.conversionRate}%`, ICONS.PERCENT, "bg-purple-500")}
+                    ${renderStatCard("Seus Leads Cadastrados", stats.userLeads, ICONS.USER, "bg-yellow-500")}
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100 mt-8">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="10" width="4" height="12"/><rect x="7" y="6" width="4" height="16"/><rect x="13" y="2" width="4" height="20"/><rect x="19" y="14" width="4" height="8"/></svg>
+                        Visão Rápida
+                    </h3>
+                    <p class="text-gray-600">
+                        O Painel Principal oferece uma visão em tempo real do volume de leads e do desempenho de conversão da equipe. 
+                        Use a aba **Cadastrar Lead** para adicionar novos contatos e a **Histórico / Acesso** para gerenciar e filtrar os resultados.
+                    </p>
+                </div>
+            `;
+        }
 
-  const handleSave = async (e) => {
-    e.preventDefault();
-    setIsSaving(true);
-    setMessage(null);
-    setIsError(false);
+        function calculateStats() {
+            const totalLeads = leadsData.length;
+            const convertedLeads = leadsData.filter(lead => lead.converted).length;
+            const userLeads = leadsData.filter(lead => lead.promotorId === currentUserId).length;
+            const conversionRate = totalLeads > 0 
+                ? ((convertedLeads / totalLeads) * 100).toFixed(1) 
+                : 0.0;
+            return { totalLeads, convertedLeads, userLeads, conversionRate };
+        }
 
-    // 1. Validação dos Campos Obrigatórios
-    if (!formData.acao || !formData.nome || !formData.telefone) {
-      setMessage('Por favor, preencha os campos obrigatórios (Ação, Nome, Telefone).');
-      setIsError(true);
-      setIsSaving(false);
-      return;
-    }
+        function renderStatCard(title, value, iconHTML, colorClass) {
+            return `
+                <div class="p-5 rounded-xl shadow-xl border-l-4 ${colorClass.replace('bg-', 'border-')} bg-white transition-all hover:shadow-2xl">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500 truncate">${title}</p>
+                            <p class="mt-1 text-3xl font-bold text-gray-900">${value}</p>
+                        </div>
+                        <div class="p-3 rounded-full ${colorClass} bg-opacity-10">
+                            ${iconHTML.replace('h-5 w-5', 'h-6 w-6').replace('mr-2 inline-block', '')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
 
-    const cleanedPhone = formatPhone(formData.telefone);
-    const cleanedCpf = formatCpf(formData.cpf);
+        // --- 4. Cadastro de Leads ---
 
-    // 2. Verificação de Duplicidade (Telefone e CPF)
-    // O CPF é opcional, só verifica se foi preenchido.
-    const duplicateExists = leads.some(lead => {
-      const existingPhone = formatPhone(lead.telefone);
-      const existingCpf = formatCpf(lead.cpf);
-      
-      const isPhoneDuplicate = cleanedPhone && existingPhone === cleanedPhone;
-      const isCpfDuplicate = cleanedCpf && cleanedCpf.length > 0 && existingCpf === cleanedCpf; // Só verifica CPF se houver CPF
-      
-      return isPhoneDuplicate || isCpfDuplicate;
-    });
+        function renderRegistration() {
+            const formContainer = document.getElementById('view-cadastro');
+            formContainer.innerHTML = `
+                <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-blue-500 pb-2 mb-4">Cadastro de Novo Lead</h2>
+                <div class="bg-white p-6 md:p-8 rounded-xl shadow-2xl max-w-2xl mx-auto border border-gray-100">
+                    <div id="registration-message" class="hidden mt-4 p-3 rounded-lg text-center font-medium shadow-md"></div>
+                    <form id="lead-form" class="space-y-4">
+                        ${renderInputField("Nome da Ação", "acao", "text", true, "Ex: Evento Junino, Feira de Cursos", ICONS.TAG)}
+                        ${renderInputField("Nome Completo", "nome", "text", true, "", ICONS.USER)}
+                        ${renderInputField("Telefone (WhatsApp)", "telefone", "tel", true, "Apenas números, inclua DDD (Ex: 24988887777)", ICONS.PHONE)}
+                        ${renderInputField("Email", "email", "email", false, "exemplo@dominio.com", ICONS.MAIL)}
+                        ${renderInputField("CPF", "cpf", "text", false, "Apenas números (Opcional, mas não pode ser duplicado)", ICONS.HASH)}
+                        ${renderInputField("Curso de Interesse", "cursoInteresse", "text", false, "Ex: Engenharia Civil, Administração", ICONS.LIST)}
+                        
+                        <button type="submit" id="btn-save-lead" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-all flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                            <span>Salvar Novo Lead</span>
+                        </button>
+                    </form>
+                </div>
+            `;
+            document.getElementById('lead-form').addEventListener('submit', handleSaveLead);
+        }
 
-    if (duplicateExists) {
-      setMessage('ERRO: Lead já cadastrado! Telefone ou CPF já existem no sistema. Não é permitido salvar dados duplicados.');
-      setIsError(true);
-      setIsSaving(false);
-      return;
-    }
-
-    // 3. Salvamento no Firestore
-    try {
-      const newLead = {
-        acao: formData.acao,
-        nome: formData.nome,
-        telefone: cleanedPhone, // Salva o telefone apenas com números
-        email: formData.email,
-        cpf: cleanedCpf, // Salva o CPF apenas com números
-        cursoInteresse: formData.cursoInteresse,
-        converted: false,
-        createdAt: serverTimestamp(),
-        promotorId: userId, // ID do usuário logado (para estatísticas)
-        promotorUserId: fullUserId, // ID completo para exibição no histórico
-      };
-
-      const leadsCollectionRef = collection(db, COLLECTION_PATH);
-      await addDoc(leadsCollectionRef, newLead);
-
-      setMessage('Lead cadastrado com sucesso!');
-      setIsError(false);
-      // Limpar formulário, exceto 'acao' para agilizar cadastros repetidos
-      setFormData(prev => ({
-        ...prev, 
-        nome: '', telefone: '', email: '', cpf: '', cursoInteresse: ''
-      }));
-
-    } catch (error) {
-      console.error("Erro ao salvar o lead:", error);
-      setMessage('Erro ao salvar o lead no banco de dados. Tente novamente.');
-      setIsError(true);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const MessageDisplay = ({ message, isError }) => (
-    <div className={`mt-4 p-3 rounded-lg text-center font-medium shadow-md ${isError ? 'bg-red-100 text-red-700 border border-red-300' : 'bg-green-100 text-green-700 border border-green-300'}`}>
-      {message}
-    </div>
-  );
-
-  return (
-    <div className="space-y-8">
-      <h2 className="text-3xl font-extrabold text-gray-900 border-b-4 border-blue-500 pb-2 mb-4">Cadastro de Novo Lead</h2>
-      <div className="bg-white p-6 md:p-8 rounded-xl shadow-2xl max-w-2xl mx-auto border border-gray-100">
+        function renderInputField(label, name, type, required, placeholder, iconHTML) {
+            return `
+                <div>
+                    <label for="${name}" class="block text-sm font-medium text-gray-700 flex items-center">
+                        ${iconHTML.replace('h-5 w-5', 'h-4 w-4').replace('mr-2 inline-block', 'mr-1 text-blue-500')}
+                        ${label}
+                        ${required ? '<span class="ml-1 text-red-500">*</span>' : ''}
+                    </label>
+                    <div class="mt-1">
+                        <input
+                            type="${type === 'email' || type === 'tel' ? 'text' : type}"
+                            name="${name}"
+                            id="${name}"
+                            required="${required ? 'required' : ''}"
+                            placeholder="${placeholder}"
+                            class="block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-all"
+                        >
+                    </div>
+                </div>
+            `;
+        }
         
-        {message && <MessageDisplay message={message} isError={isError} />}
+        async function handleSaveLead(e) {
+            e.preventDefault();
+            const form = e.target;
+            const btn = document.getElementById('btn-save-lead');
+            const msgEl = document.getElementById('registration-message');
+            
+            msgEl.classList.add('hidden');
+            btn.disabled = true;
+            btn.innerHTML = `<svg class="animate-spin h-5 w-5 mr-3 text-white" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> <span>Salvando...</span>`;
 
-        <form onSubmit={handleSave} className="space-y-4">
-          <InputField 
-            label="Nome da Ação" 
-            name="acao" 
-            value={formData.acao} 
-            onChange={handleChange} 
-            required 
-            icon={Tag}
-            placeholder="Ex: Evento Junino, Feira de Cursos"
-          />
-          <InputField 
-            label="Nome Completo" 
-            name="nome" 
-            value={formData.nome} 
-            onChange={handleChange} 
-            required 
-            icon={User}
-          />
-          <InputField 
-            label="Telefone (WhatsApp)" 
-            name="telefone" 
-            value={formData.telefone} 
-            onChange={handleChange} 
-            type="tel"
-            required 
-            placeholder="Apenas números, inclua DDD (Ex: 24988887777)"
-            icon={Smartphone}
-          />
-          <InputField 
-            label="Email" 
-            name="email" 
-            value={formData.email} 
-            onChange={handleChange} 
-            type="email"
-            icon={Mail}
-            placeholder="exemplo@dominio.com"
-          />
-          <InputField 
-            label="CPF" 
-            name="cpf" 
-            value={formData.cpf} 
-            onChange={handleChange} 
-            placeholder="Apenas números (Opcional, mas não pode ser duplicado)"
-            icon={Hash}
-          />
-          <InputField 
-            label="Curso de Interesse" 
-            name="cursoInteresse" 
-            value={formData.cursoInteresse} 
-            onChange={handleChange} 
-            icon={List}
-            placeholder="Ex: Engenharia Civil, Administração"
-          />
-          
-          <button 
-            type="submit" 
-            disabled={isSaving}
-            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition duration-200 transform hover:scale-[1.01] flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isSaving ? (
-              <>
-                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                <span>Salvando...</span>
-              </>
-            ) : (
-              <>
-                <Save className="h-5 w-5" />
-                <span>Salvar Novo Lead</span>
-              </>
-            )}
-          </button>
-        </form>
-      </div>
-    </div>
-  );
-};
+            const formData = {
+                acao: form.acao.value,
+                nome: form.nome.value,
+                telefone: form.telefone.value,
+                email: form.email.value,
+                cpf: form.cpf.value,
+                cursoInteresse: form.cursoInteresse.value
+            };
 
-// Input de Formulário reutilizável
-const InputField = ({ label, name, value, onChange, required, icon: Icon, ...props }) => (
-  <div>
-    <label htmlFor={name} className="block text-sm font-medium text-gray-700 flex items-center">
-      <Icon className="h-4 w-4 mr-1 text-blue-500" />
-      {label}
-      {required && <span className="ml-1 text-red-500">*</span>}
-    </label>
-    <div className="mt-1">
-      <input
-        type="text"
-        name={name}
-        id={name}
-        value={value}
-        onChange={onChange}
-        required={required}
-        className="block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition duration-150"
-        {...props}
-      />
-    </div>
-  </div>
-);
+            // 1. Validação Obrigatória
+            if (!formData.acao || !formData.nome || !formData.telefone) {
+                showMessage(msgEl, 'Por favor, preencha os campos obrigatórios (Ação, Nome, Telefone).', true);
+                btn.disabled = false;
+                btn.innerHTML = `<span>Salvar Novo Lead</span>`;
+                return;
+            }
 
-// --- Componente de Histórico e Acesso de Leads ---
-const LeadHistory = ({ db, leads }) => {
-  const [filters, setFilters] = useState({
-    acao: '',
-    dia: '',
-    promotorId: '',
-    converted: 'all' // 'all', 'true', 'false'
-  });
+            const cleanedPhone = formatPhone(formData.telefone);
+            const cleanedCpf = formatCpf(formData.cpf);
+            
+            // 2. Verificação de Duplicidade
+            const duplicateExists = leadsData.some(lead => {
+                const existingPhone = formatPhone(lead.telefone);
+                const existingCpf = formatCpf(lead.cpf);
+                
+                const isPhoneDuplicate = cleanedPhone && existingPhone === cleanedPhone;
+                const isCpfDuplicate = cleanedCpf && cleanedCpf.length > 0 && existingCpf === cleanedCpf;
+                
+                return isPhoneDuplicate || isCpfDuplicate;
+            });
 
-  const [uniqueActions, setUniqueActions] = useState([]);
-  const [uniquePromotors, setUniquePromotors] = useState([]);
+            if (duplicateExists) {
+                showMessage(msgEl, 'ERRO: Lead já cadastrado! Telefone ou CPF já existem no sistema. Não é permitido salvar dados duplicados.', true);
+                btn.disabled = false;
+                btn.innerHTML = `<span>Salvar Novo Lead</span>`;
+                return;
+            }
 
-  // Popula os filtros de Ações e Promotores com base nos leads existentes
-  useEffect(() => {
-    const actions = [...new Set(leads.map(lead => lead.acao).filter(Boolean))];
-    const promotors = [...new Set(leads.map(lead => lead.promotorUserId).filter(Boolean))];
-    setUniqueActions(actions.sort());
-    setUniquePromotors(promotors.sort());
-  }, [leads]);
+            // 3. Salvamento
+            try {
+                const newLead = {
+                    acao: formData.acao,
+                    nome: formData.nome,
+                    telefone: cleanedPhone,
+                    email: formData.email,
+                    cpf: cleanedCpf,
+                    cursoInteresse: formData.cursoInteresse,
+                    converted: false,
+                    createdAt: serverTimestamp(),
+                    promotorId: currentUserId,
+                    promotorUserId: fullUserId,
+                };
 
+                const leadsCollectionRef = collection(db, COLLECTION_PATH);
+                await addDoc(leadsCollectionRef, newLead);
 
-  const handleFilterChange = (e) => {
-    const { name, value } = e.target;
-    setFilters(prev => ({ ...prev, [name]: value }));
-  };
+                showMessage(msgEl, 'Lead cadastrado com sucesso!', false);
+                // Limpar formulário (exceto ação)
+                form.nome.value = '';
+                form.telefone.value = '';
+                form.email.value = '';
+                form.cpf.value = '';
+                form.cursoInteresse.value = '';
 
-  // Função de Ação: Marcar/Desmarcar Conversão
-  const handleConversionToggle = useCallback(async (leadId, currentStatus) => {
-    if (!db) return;
-    try {
-      const docRef = doc(db, COLLECTION_PATH, leadId);
-      await updateDoc(docRef, {
-        converted: !currentStatus
-      });
-    } catch (error) {
-      console.error("Erro ao atualizar status de conversão:", error);
-      // Usando console.error em vez de alert()
-      console.log('Erro ao atualizar o status de conversão. Verifique a conexão.');
-    }
-  }, [db]);
+            } catch (error) {
+                console.error("Erro ao salvar o lead:", error);
+                showMessage(msgEl, 'Erro ao salvar o lead no banco de dados. Tente novamente.', true);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<span>Salvar Novo Lead</span>`;
+            }
+        }
 
+        function showMessage(el, message, isError) {
+            el.textContent = message;
+            el.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'border-red-300', 'bg-green-100', 'text-green-700', 'border-green-300');
+            if (isError) {
+                el.classList.add('bg-red-100', 'text-red-700', 'border-red-300');
+            } else {
+                el.classList.add('bg-green-100', 'text-green-700', 'border-green-300');
+            }
+        }
 
-  // Lógica de Filtragem
-  const filteredLeads = useMemo(() => {
-    let filtered = leads;
+        // --- 5. Histórico de Leads ---
+        
+        let filterState = { acao: '', dia: '', promotorId: '', converted: 'all' };
 
-    // 1. Filtrar por Ação
-    if (filters.acao) {
-      filtered = filtered.filter(lead => lead.acao === filters.acao);
-    }
+        function renderHistory() {
+            const historyEl = document.getElementById('view-historico');
+            const uniqueActions = [...new Set(leadsData.map(lead => lead.acao).filter(Boolean))].sort();
+            const uniquePromotors = [...new Set(leadsData.map(lead => lead.promotorUserId).filter(Boolean))].sort();
 
-    // 2. Filtrar por Dia
-    if (filters.dia) {
-      const filterDate = new Date(filters.dia).toDateString();
-      filtered = filtered.filter(lead => {
-        if (!lead.createdAt) return false;
-        // Converte o Timestamp do Firestore para Date para comparação
-        const leadDate = lead.createdAt.toDate ? lead.createdAt.toDate().toDateString() : new Date(lead.createdAt).toDateString();
-        return leadDate === filterDate;
-      });
-    }
+            historyEl.innerHTML = `
+                <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-blue-500 pb-2 mb-4">Acesso e Histórico de Leads</h2>
 
-    // 3. Filtrar por Promotor
-    if (filters.promotorId) {
-      filtered = filtered.filter(lead => lead.promotorUserId === filters.promotorId);
-    }
+                <!-- Área de Filtros -->
+                <div class="bg-white p-6 rounded-xl shadow-lg grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 border border-gray-100" id="filter-container">
+                    ${renderFilterSelect("Ação", "acao", uniqueActions, filterState.acao, ICONS.TAG)}
+                    ${renderFilterDate("Dia de Cadastro", "dia", filterState.dia, ICONS.CALENDAR)}
+                    ${renderFilterSelect("Promotor (ID)", "promotorId", uniquePromotors, filterState.promotorId, ICONS.USER)}
+                    ${renderFilterStatus("Status Conversão", "converted", filterState.converted, ICONS.CHECK)}
+                    <div class='flex items-end'>
+                        <button id="btn-clear-filters" class="w-full bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg transition-all shadow-md flex items-center justify-center space-x-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                            <span>Limpar Filtros</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Tabela de Leads será injetada aqui -->
+                <div id="leads-table-container" class="mt-8"></div>
+            `;
+            
+            document.getElementById('filter-container').addEventListener('change', (e) => handleFilterChange(e.target.name, e.target.value));
+            document.getElementById('btn-clear-filters').addEventListener('click', handleClearFilters);
+            
+            renderLeadsTable();
+        }
 
-    // 4. Filtrar por Conversão
-    if (filters.converted !== 'all') {
-      const isConverted = filters.converted === 'true';
-      filtered = filtered.filter(lead => lead.converted === isConverted);
-    }
+        function renderFilterSelect(label, name, options, currentValue, iconHTML) {
+            return `
+                <div>
+                    <label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                        ${iconHTML.replace('h-5 w-5', 'h-4 w-4').replace('mr-2 inline-block', 'mr-1 text-blue-500')}
+                        ${label}
+                    </label>
+                    <select id="${name}" name="${name}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white">
+                        <option value="">-- Todos --</option>
+                        ${options.map(opt => `<option value="${opt}" ${opt === currentValue ? 'selected' : ''}>${opt.substring(0, 15)}${opt.length > 15 ? '...' : ''}</option>`).join('')}
+                    </select>
+                </div>
+            `;
+        }
 
-    // Ordena pelo mais recente (do Firestore Timestamp)
-    filtered.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-
-    return filtered;
-  }, [leads, filters]);
+        function renderFilterDate(label, name, currentValue, iconHTML) {
+            return `
+                <div>
+                    <label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                        ${iconHTML.replace('h-5 w-5', 'h-4 w-4').replace('mr-2 inline-block', 'mr-1 text-blue-500')}
+                        ${label}
+                    </label>
+                    <input type="date" name="${name}" id="${name}" value="${currentValue}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white"/>
+                </div>
+            `;
+        }
+        
+        function renderFilterStatus(label, name, currentValue, iconHTML) {
+            return `
+                <div>
+                    <label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                        ${iconHTML.replace('h-5 w-5', 'h-4 w-4').replace('mr-2 inline-block', 'mr-1 text-blue-500')}
+                        ${label}
+                    </label>
+                    <select id="${name}" name="${name}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white">
+                        <option value="all" ${currentValue === 'all' ? 'selected' : ''}>Todos os Status</option>
+                        <option value="true" ${currentValue === 'true' ? 'selected' : ''}>Convertido</option>
+                        <option value="false" ${currentValue === 'false' ? 'selected' : ''}>Pendente</option>
+                    </select>
+                </div>
+            `;
+        }
 
 
-  const FilterSelect = ({ label, name, options, value, icon: Icon }) => (
-    <div>
-      <label htmlFor={name} className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
-        <Icon className="h-4 w-4 mr-1 text-blue-500" />
-        {label}
-      </label>
-      <select
-        id={name}
-        name={name}
-        value={value}
-        onChange={handleFilterChange}
-        className="block w-full rounded-lg border-gray-300 shadow-sm p-2 border focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white"
-      >
-        <option value="">-- Todos --</option>
-        {options.map(opt => (
-          <option key={opt} value={opt}>{opt}</option>
-        ))}
-      </select>
-    </div>
-  );
+        function handleFilterChange(name, value) {
+            filterState[name] = value;
+            renderLeadsTable();
+        }
 
-  return (
-    <div className="space-y-8">
-      <h2 className="text-3xl font-extrabold text-gray-900 border-b-4 border-blue-500 pb-2 mb-4">Acesso e Histórico de Leads</h2>
+        function handleClearFilters() {
+            filterState = { acao: '', dia: '', promotorId: '', converted: 'all' };
+            renderHistory(); // Re-renderiza o histórico para atualizar os inputs
+        }
 
-      {/* Área de Filtros */}
-      <div className="bg-white p-6 rounded-xl shadow-lg grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 border border-gray-100">
-        <FilterSelect 
-          label="Ação" 
-          name="acao" 
-          options={uniqueActions} 
-          value={filters.acao}
-          icon={Tag}
-        />
-        <div>
-          <label htmlFor="dia" className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
-            <Calendar className="h-4 w-4 mr-1 text-blue-500" />
-            Dia de Cadastro
-          </label>
-          <input
-            type="date"
-            name="dia"
-            id="dia"
-            value={filters.dia}
-            onChange={handleFilterChange}
-            className="block w-full rounded-lg border-gray-300 shadow-sm p-2 border focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white"
-          />
-        </div>
-        <FilterSelect 
-          label="Promotor (ID)" 
-          name="promotorId" 
-          options={uniquePromotors} 
-          value={filters.promotorId}
-          icon={User}
-        />
-        <div className='col-span-1'>
-          <label htmlFor="converted" className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
-            <CheckCircle className="h-4 w-4 mr-1 text-blue-500" />
-            Status Conversão
-          </label>
-          <select
-            id="converted"
-            name="converted"
-            value={filters.converted}
-            onChange={handleFilterChange}
-            className="block w-full rounded-lg border-gray-300 shadow-sm p-2 border focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white"
-          >
-            <option value="all">Todos os Status</option>
-            <option value="true">Convertido</option>
-            <option value="false">Pendente</option>
-          </select>
-        </div>
-        <div className='flex items-end'>
-          <button 
-            onClick={() => setFilters({ acao: '', dia: '', promotorId: '', converted: 'all' })}
-            className="w-full bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg transition duration-200 shadow-md flex items-center justify-center space-x-2"
-          >
-            <XCircle className="h-5 w-5" />
-            <span>Limpar Filtros</span>
-          </button>
-        </div>
-      </div>
-      
-      {/* Tabela de Leads */}
-      <div className="overflow-x-auto bg-white rounded-xl shadow-2xl border border-gray-100">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-blue-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ação / Data</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome / Contato</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">Curso / CPF</th>
-              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Conversão</th>
-              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {filteredLeads.length === 0 ? (
-              <tr>
-                <td colSpan="5" className="px-6 py-4 text-sm text-gray-500 text-center">Nenhum lead encontrado com os filtros aplicados.</td>
-              </tr>
-            ) : (
-              filteredLeads.map(lead => (
-                <LeadRow 
-                  key={lead.id} 
-                  lead={lead} 
-                  onConversionToggle={handleConversionToggle} 
-                />
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-};
+        function filterLeads() {
+            let filtered = leadsData;
 
-// Linha da Tabela de Leads
-const LeadRow = ({ lead, onConversionToggle }) => {
-  // Cria o link do WhatsApp com o código do país (55 - Brasil)
-  const waLink = `https://wa.me/55${lead.telefone}`;
+            if (filterState.acao) {
+                filtered = filtered.filter(lead => lead.acao === filterState.acao);
+            }
 
-  // Função para formatar data de criação
-  const formatDate = (timestamp) => {
-    if (!timestamp) return 'N/A';
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return date.toLocaleDateString('pt-BR');
-  };
+            if (filterState.dia) {
+                const filterDate = new Date(filterState.dia).toDateString();
+                filtered = filtered.filter(lead => {
+                    if (!lead.createdAt) return false;
+                    const leadDate = lead.createdAt.toDate ? lead.createdAt.toDate().toDateString() : new Date(lead.createdAt).toDateString();
+                    return leadDate === filterDate;
+                });
+            }
 
-  return (
-    <tr className="hover:bg-blue-50 transition duration-150">
-      <td className="px-6 py-4 whitespace-nowrap">
-        <div className="text-sm font-medium text-gray-900">{lead.acao}</div>
-        <div className="text-xs text-gray-500 mt-1">
-          <Calendar className="h-3 w-3 inline mr-1" />
-          {formatDate(lead.createdAt)}
-        </div>
-      </td>
-      <td className="px-6 py-4 whitespace-nowrap">
-        <div className="text-sm font-semibold text-blue-600">{lead.nome}</div>
-        <div className="text-xs text-gray-500">
-            <Smartphone className="h-3 w-3 inline mr-1" />
-            {lead.telefone}
-        </div>
-        <div className="text-xs text-gray-500 truncate max-w-[150px]">
-            <Mail className="h-3 w-3 inline mr-1" />
-            {lead.email || 'N/A'}
-        </div>
-      </td>
-      <td className="px-6 py-4 whitespace-nowrap hidden sm:table-cell">
-        <div className="text-sm text-gray-800">{lead.cursoInteresse || 'N/A'}</div>
-        <div className="text-xs text-gray-500">Promotor: {lead.promotorUserId.substring(0, 8)}...</div>
-      </td>
-      <td className="px-6 py-4 whitespace-nowrap text-center">
-        <button
-          onClick={() => onConversionToggle(lead.id, lead.converted)}
-          className={`px-3 py-1 rounded-full text-xs font-bold shadow-md transition duration-200 transform hover:scale-105 ${
-            lead.converted ? 'bg-green-500 text-white hover:bg-green-600' : 'bg-red-100 text-red-700 hover:bg-red-200'
-          }`}
-          title="Clique para mudar o status de conversão"
-        >
-          {lead.converted ? 'CONVERTIDO' : 'PENDENTE'}
-        </button>
-      </td>
-      <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
-        <a 
-          href={waLink} 
-          target="_blank" 
-          rel="noopener noreferrer"
-          className="inline-flex items-center justify-center p-3 bg-green-100 border-2 border-green-500 text-green-600 hover:text-white hover:bg-green-600 rounded-xl transition duration-200 shadow-md"
-          title="Chamar no WhatsApp"
-        >
-          <MessageSquare className="h-5 w-5" />
-        </a>
-      </td>
-    </tr>
-  );
-};
+            if (filterState.promotorId) {
+                filtered = filtered.filter(lead => lead.promotorUserId === filterState.promotorId);
+            }
 
-// --- Componente de Rodapé (Footer) ---
-const Footer = () => (
-  <footer className="bg-gray-900 text-white p-4 mt-8">
-    <div className="max-w-7xl mx-auto text-center text-sm text-gray-400">
-      Sistema de Gestão de Leads Angra | ID do Aplicativo: {appId}
-    </div>
-  </footer>
-);
+            if (filterState.converted !== 'all') {
+                const isConverted = filterState.converted === 'true';
+                filtered = filtered.filter(lead => lead.converted === isConverted);
+            }
+            
+            // Ordena pelo mais recente
+            filtered.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
 
-export default App;
+            return filtered;
+        }
+
+        function renderLeadsTable() {
+            const container = document.getElementById('leads-table-container');
+            const filteredLeads = filterLeads();
+
+            let tableHTML = `
+                <div class="overflow-x-auto bg-white rounded-xl shadow-2xl border border-gray-100">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-blue-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ação / Data</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome / Contato</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">Curso / Promotor</th>
+                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Conversão</th>
+                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+            `;
+
+            if (filteredLeads.length === 0) {
+                tableHTML += `
+                    <tr>
+                        <td colSpan="5" class="px-6 py-4 text-sm text-gray-500 text-center">Nenhum lead encontrado com os filtros aplicados.</td>
+                    </tr>
+                `;
+            } else {
+                filteredLeads.forEach(lead => {
+                    const waLink = `https://wa.me/55${lead.telefone}`;
+                    tableHTML += `
+                        <tr class="hover:bg-blue-50 transition-all">
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm font-medium text-gray-900">${lead.acao}</div>
+                                <div class="text-xs text-gray-500 mt-1 flex items-center">
+                                    ${ICONS.CALENDAR.replace('h-5 w-5', 'h-3 w-3').replace('mr-2 inline-block', 'mr-1')}
+                                    ${formatDate(lead.createdAt)}
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm font-semibold text-blue-600">${lead.nome}</div>
+                                <div class="text-xs text-gray-500 flex items-center">
+                                    ${ICONS.PHONE.replace('h-5 w-5', 'h-3 w-3').replace('mr-2 inline-block', 'mr-1')}
+                                    ${lead.telefone}
+                                </div>
+                                <div class="text-xs text-gray-500 truncate max-w-[150px] flex items-center">
+                                    ${ICONS.MAIL.replace('h-5 w-5', 'h-3 w-3').replace('mr-2 inline-block', 'mr-1')}
+                                    ${lead.email || 'N/A'}
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap hidden sm:table-cell">
+                                <div class="text-sm text-gray-800">${lead.cursoInteresse || 'N/A'}</div>
+                                <div class="text-xs text-gray-500">Promotor: ${lead.promotorUserId.substring(0, 8)}...</div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-center">
+                                <button
+                                    onclick="handleConversionToggle('${lead.id}', ${lead.converted})"
+                                    class="px-3 py-1 rounded-full text-xs font-bold shadow-md transition-all transform hover:scale-105 ${
+                                        lead.converted ? 'bg-green-500 text-white hover:bg-green-600' : 'bg-red-100 text-red-700 hover:bg-red-200'
+                                    }"
+                                    title="Clique para mudar o status de conversão"
+                                >
+                                    ${lead.converted ? 'CONVERTIDO' : 'PENDENTE'}
+                                </button>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
+                                <a 
+                                    href="${waLink}" 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    class="inline-flex items-center justify-center p-3 bg-green-100 border-2 border-green-500 text-green-600 hover:text-white hover:bg-green-600 rounded-xl transition-all shadow-md"
+                                    title="Chamar no WhatsApp"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15V8a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14l4 4z"/><line x1="12" y1="12" x2="12" y2="12"/><line x1="16" y1="12" x2="16" y2="12"/><line x1="8" y1="12" x2="8" y2="12"/></svg>
+                                </a>
+                            </td>
+                        </tr>
+                    `;
+                });
+            }
+
+            tableHTML += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            container.innerHTML = tableHTML;
+        }
+
+        async function handleConversionToggle(leadId, currentStatus) {
+            if (!db) return;
+            try {
+                const docRef = doc(db, COLLECTION_PATH, leadId);
+                await updateDoc(docRef, {
+                    converted: !currentStatus
+                });
+                // A atualização de tela será feita automaticamente pelo onSnapshot
+            } catch (error) {
+                console.error("Erro ao atualizar status de conversão:", error);
+                // Em um ambiente de produção, aqui se mostraria uma mensagem de erro na UI
+            }
+        }
+        
+        // --- Inicialização ---
+
+        // Chama renderRegistration() uma vez, pois é estático (formulário)
+        window.addEventListener('load', () => {
+            initApp();
+            renderRegistration(); 
+        });
+
+        // Torna a função globalmente acessível para ser chamada pelo onclick="" no HTML gerado
+        window.handleConversionToggle = handleConversionToggle;
+    </script>
+</body>
+</html>
