@@ -51,6 +51,13 @@
                     </button>
                 </form>
                 <div id="login-error" class="text-center text-red-500 text-sm"></div>
+                 <!-- Seção de cadastro do primeiro usuário -->
+                <div id="first-user-register-prompt" class="hidden text-center pt-4 border-t border-gray-200">
+                    <p class="text-sm text-gray-600">Primeiro acesso ao sistema?</p>
+                    <button id="show-admin-register-btn" class="mt-2 font-semibold text-blue-600 hover:text-blue-700">
+                        Clique aqui para cadastrar o administrador
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -63,6 +70,10 @@
                     <p class="text-gray-600">Bem-vindo! Cadastre o primeiro usuário administrador do sistema.</p>
                 </div>
                 <form id="admin-register-form" class="space-y-6">
+                     <div>
+                        <label for="admin-nome" class="text-sm font-medium text-gray-700">Nome Completo</label>
+                        <input id="admin-nome" name="admin-nome" type="text" required class="w-full px-4 py-2 mt-1 text-gray-700 bg-gray-100 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Seu Nome Completo">
+                    </div>
                     <div>
                         <label for="admin-email" class="text-sm font-medium text-gray-700">Email</label>
                         <input id="admin-email" name="admin-email" type="email" required class="w-full px-4 py-2 mt-1 text-gray-700 bg-gray-100 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="admin@email.com">
@@ -97,6 +108,7 @@
                 <!-- Abas de Navegação -->
                 <nav class="mb-6 border-b border-gray-200">
                     <div class="flex space-x-4">
+                        <button data-tab="dashboard" class="tab-button py-2 px-1 text-gray-600 hover:text-blue-600" id="tab-dashboard-btn"><i class="fas fa-chart-pie mr-2"></i>Painel Principal</button>
                         <button data-tab="cadastro" class="tab-button py-2 px-1 text-gray-600 hover:text-blue-600" id="tab-cadastro-btn"><i class="fas fa-plus-circle mr-2"></i>Cadastrar Lead</button>
                         <button data-tab="leads" class="tab-button py-2 px-1 text-gray-600 hover:text-blue-600" id="tab-leads-btn"><i class="fas fa-list-ul mr-2"></i>Leads Cadastrados</button>
                         <button data-tab="historico" class="tab-button py-2 px-1 text-gray-600 hover:text-blue-600" id="tab-historico-btn"><i class="fas fa-history mr-2"></i>Histórico</button>
@@ -106,8 +118,55 @@
 
                 <!-- Conteúdo das Abas -->
                 <div id="tab-content">
+                    <!-- Aba de Dashboard -->
+                    <div id="dashboard-tab" class="tab-pane">
+                        <h2 class="text-2xl font-bold mb-4">Bem-vindo, <span id="dashboard-user-name"></span>!</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                            <!-- Card Total Leads -->
+                            <div class="bg-white p-6 rounded-xl shadow-lg flex items-center">
+                                <div class="bg-blue-100 p-4 rounded-full">
+                                    <i class="fas fa-users text-2xl text-blue-600"></i>
+                                </div>
+                                <div class="ml-4">
+                                    <p class="text-gray-500">Total de Leads</p>
+                                    <p id="stats-total-leads" class="text-2xl font-bold">0</p>
+                                </div>
+                            </div>
+                            <!-- Card Leads Convertidos -->
+                             <div class="bg-white p-6 rounded-xl shadow-lg flex items-center">
+                                <div class="bg-green-100 p-4 rounded-full">
+                                    <i class="fas fa-check-circle text-2xl text-green-600"></i>
+                                </div>
+                                <div class="ml-4">
+                                    <p class="text-gray-500">Leads Convertidos</p>
+                                    <p id="stats-converted-leads" class="text-2xl font-bold">0</p>
+                                </div>
+                            </div>
+                            <!-- Card Taxa de Conversão -->
+                             <div class="bg-white p-6 rounded-xl shadow-lg flex items-center">
+                                <div class="bg-yellow-100 p-4 rounded-full">
+                                    <i class="fas fa-percentage text-2xl text-yellow-600"></i>
+                                </div>
+                                <div class="ml-4">
+                                    <p class="text-gray-500">Taxa de Conversão</p>
+                                    <p id="stats-conversion-rate" class="text-2xl font-bold">0%</p>
+                                </div>
+                            </div>
+                            <!-- Card Meus Leads -->
+                             <div class="bg-white p-6 rounded-xl shadow-lg flex items-center">
+                                <div class="bg-purple-100 p-4 rounded-full">
+                                    <i class="fas fa-user-tag text-2xl text-purple-600"></i>
+                                </div>
+                                <div class="ml-4">
+                                    <p class="text-gray-500">Meus Leads Cadastrados</p>
+                                    <p id="stats-my-leads" class="text-2xl font-bold">0</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Aba de Cadastro -->
-                    <div id="cadastro-tab" class="tab-pane bg-white p-6 rounded-xl shadow-lg">
+                    <div id="cadastro-tab" class="tab-pane hidden bg-white p-6 rounded-xl shadow-lg">
                         <h2 class="text-2xl font-bold mb-4">Cadastrar Novo Lead</h2>
                         <form id="add-lead-form" class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div class="md:col-span-2">
@@ -205,6 +264,10 @@
                             <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-lg">
                                 <h3 class="text-xl font-bold mb-4">Adicionar Novo Usuário</h3>
                                 <form id="add-user-form" class="space-y-4">
+                                     <div>
+                                        <label for="new-user-nome" class="block text-sm font-medium text-gray-700">Nome Completo</label>
+                                        <input type="text" id="new-user-nome" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
+                                    </div>
                                     <div>
                                         <label for="new-user-email" class="block text-sm font-medium text-gray-700">Email do Usuário</label>
                                         <input type="email" id="new-user-email" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
@@ -230,6 +293,7 @@
                                     <table class="min-w-full bg-white">
                                         <thead class="bg-gray-50">
                                             <tr>
+                                                <th class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
                                                 <th class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
                                                 <th class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Perfil</th>
                                             </tr>
@@ -273,8 +337,11 @@
         // --- INICIALIZAÇÃO DO FIREBASE ---
         let app, auth, db, secondaryAuth;
         let currentUser = null;
-        let currentUserRole = null;
+        let currentUserData = null;
         let allLeads = []; // Cache local para filtros
+        let unsubscribeLeads = null;
+        let unsubscribeHistory = null;
+        let unsubscribeUsers = null;
 
         if (Object.keys(firebaseConfig).length > 0) {
             app = initializeApp(firebaseConfig);
@@ -300,9 +367,12 @@
         const adminRegisterError = document.getElementById('admin-register-error');
         const logoutButton = document.getElementById('logout-button');
         const userEmailDisplay = document.getElementById('user-email-display');
+        const dashboardUserName = document.getElementById('dashboard-user-name');
         const tabs = document.querySelectorAll('.tab-button');
         const tabPanes = document.querySelectorAll('.tab-pane');
         const addLeadForm = document.getElementById('add-lead-form');
+        const firstUserPrompt = document.getElementById('first-user-register-prompt');
+        const showAdminRegisterBtn = document.getElementById('show-admin-register-btn');
         
         // --- NOTIFICAÇÕES ---
         const notificationModal = document.getElementById('notification-modal');
@@ -313,6 +383,11 @@
             notificationModal.classList.add('hidden');
         });
 
+        showAdminRegisterBtn.addEventListener('click', () => {
+            loginView.classList.add('hidden');
+            adminRegisterView.classList.remove('hidden');
+        });
+
         function showNotification(message) {
             notificationMessage.textContent = message;
             notificationModal.classList.remove('hidden');
@@ -321,17 +396,19 @@
         // --- VERIFICAÇÃO INICIAL DO SISTEMA ---
         async function checkInitialSetup() {
             if (!db) return;
+            // Garante que a tela de login seja exibida por padrão durante a verificação
+            loginView.classList.remove('hidden');
+            adminRegisterView.classList.add('hidden');
+
             try {
                 const usersCollectionRef = collection(db, `/artifacts/${appId}/public/data/users`);
                 const snapshot = await getDocs(usersCollectionRef);
                 if (snapshot.empty) {
-                    // Nenhum usuário existe, mostrar tela de cadastro de admin
-                    loginView.classList.add('hidden');
-                    adminRegisterView.classList.remove('hidden');
+                    // Nenhum usuário existe, mostrar a opção de cadastro de admin no painel de login.
+                    firstUserPrompt.classList.remove('hidden');
                 } else {
-                    // Usuários existem, mostrar tela de login normal
-                    adminRegisterView.classList.add('hidden');
-                    loginView.classList.remove('hidden');
+                    // Usuários já existem, esconde a opção.
+                    firstUserPrompt.classList.add('hidden');
                 }
             } catch (error) {
                 console.error("Erro ao verificar configuração inicial:", error);
@@ -346,17 +423,27 @@
             if (user && !user.isAnonymous) {
                 // A real user is signed in.
                 currentUser = user;
-                await fetchUserRole(user.uid);
+                await fetchUserData(user.uid);
                 setupUIForUser();
                 loginView.classList.add('hidden');
                 adminRegisterView.classList.add('hidden');
                 mainAppView.classList.remove('hidden');
                 userEmailDisplay.textContent = user.email;
+                dashboardUserName.textContent = currentUserData.nome || user.email;
             } else {
                 // This block runs for ANONYMOUS users and NULL (logged out) users.
                 currentUser = null;
-                currentUserRole = null;
+                currentUserData = null;
                 mainAppView.classList.add('hidden');
+
+                // Detach all real-time listeners on logout to prevent permission errors
+                if (unsubscribeLeads) unsubscribeLeads();
+                if (unsubscribeHistory) unsubscribeHistory();
+                if (unsubscribeUsers) unsubscribeUsers();
+                unsubscribeLeads = null;
+                unsubscribeHistory = null;
+                unsubscribeUsers = null;
+                allLeads = []; // Clear local data cache
 
                 if (user) { // This means user is anonymous, and we have auth to check firestore.
                    await checkInitialSetup();
@@ -386,6 +473,7 @@
         // Handler para o formulário de cadastro do ADMIN
         adminRegisterForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            const nome = document.getElementById('admin-nome').value;
             const email = document.getElementById('admin-email').value;
             const password = document.getElementById('admin-password').value;
             adminRegisterError.textContent = '';
@@ -394,10 +482,11 @@
                 const user = userCredential.user;
                 await setDoc(doc(db, `/artifacts/${appId}/public/data/users`, user.uid), {
                     uid: user.uid,
+                    nome: nome,
                     email: user.email,
                     role: 'lider' // Perfil de administrador
                 });
-                showNotification(`Administrador ${email} criado com sucesso!`);
+                showNotification(`Administrador ${nome} criado com sucesso!`);
                 // onAuthStateChanged will handle switching to the main app view.
             } catch (error) {
                 console.error("Erro ao criar administrador:", error);
@@ -413,7 +502,8 @@
             loginError.textContent = '';
             try {
                 await signInWithEmailAndPassword(auth, email, password);
-            } catch (error) {
+            } catch (error)
+            {
                 console.error("Erro de login:", error.message);
                 loginError.textContent = 'Email ou senha inválidos.';
             }
@@ -423,25 +513,27 @@
             await signOut(auth);
         });
 
-        async function fetchUserRole(uid) {
+        async function fetchUserData(uid) {
             const userDocSnap = await getDocs(query(collection(db, `/artifacts/${appId}/public/data/users`), where("uid", "==", uid)));
             if (!userDocSnap.empty) {
-                currentUserRole = userDocSnap.docs[0].data().role;
+                currentUserData = userDocSnap.docs[0].data();
             } else {
-                console.log("Perfil do usuário não encontrado.");
-                currentUserRole = 'promotor'; // Perfil padrão de segurança
+                console.log("Dados do usuário não encontrados.");
+                currentUserData = { role: 'promotor', nome: 'Usuário' }; // Default safe object
             }
         }
 
         // --- CONTROLE DE UI POR PERFIL ---
         function setupUIForUser() {
-            // Esconde todas as abas e botões primeiro
-            document.querySelectorAll('[id^="tab-"]').forEach(el => el.classList.add('hidden'));
+            // Esconde todas as abas e botões primeiro, exceto o dashboard
+            document.querySelectorAll('[id^="tab-"]').forEach(el => {
+                 if(el.id !== 'tab-dashboard-btn') el.classList.add('hidden')
+            });
 
-            if (!currentUserRole) return;
+            if (!currentUserData) return;
 
             // Mostra abas com base no perfil
-            switch (currentUserRole) {
+            switch (currentUserData.role) {
                 case 'lider':
                 case 'fdv':
                     document.getElementById('tab-cadastro-btn').classList.remove('hidden');
@@ -451,19 +543,21 @@
                     loadLeads();
                     loadHistory();
                     loadUsers();
-                    switchTab('cadastro');
                     break;
                 case 'qg':
                     document.getElementById('tab-cadastro-btn').classList.remove('hidden');
                     document.getElementById('tab-leads-btn').classList.remove('hidden');
                     loadLeads();
-                    switchTab('cadastro');
+                    loadHistory();
                     break;
                 case 'promotor':
                     document.getElementById('tab-cadastro-btn').classList.remove('hidden');
-                    switchTab('cadastro');
+                    loadHistory(); // Load all leads for stats
                     break;
             }
+            // Sempre mostra o dashboard para todos os perfis logados
+             document.getElementById('tab-dashboard-btn').classList.remove('hidden');
+             switchTab('dashboard');
         }
         
         // --- LÓGICA DAS ABAS ---
@@ -487,7 +581,7 @@
             const acao = document.getElementById('lead-acao').value.trim();
             const nome = document.getElementById('lead-nome').value.trim();
             const telefone = document.getElementById('lead-telefone').value.trim().replace(/\D/g, ''); // Remove non-digits
-            const email = document.getElementById('lead-email').value.trim();
+            const emailValue = document.getElementById('lead-email').value.trim();
             const cpf = document.getElementById('lead-cpf').value.trim().replace(/\D/g, '');
             const curso = document.getElementById('lead-curso').value.trim();
 
@@ -514,25 +608,24 @@
                         return;
                     }
                 }
-                
-                const promotorData = (await getDocs(query(collection(db, `/artifacts/${appId}/public/data/users`), where("uid", "==", currentUser.uid)))).docs[0]?.data();
 
                 // Adicionar lead
                 await addDoc(collection(db, `/artifacts/${appId}/public/data/leads`), {
                     acao,
                     nome,
                     telefone,
-                    email: email || '',
+                    email: emailValue || '',
                     cpf: cpf || '',
                     curso: curso || '',
                     converted: false,
                     createdAt: serverTimestamp(),
                     promotorId: currentUser.uid,
-                    promotorName: promotorData?.email || currentUser.email // Usa o nome/email do promotor
+                    promotorName: currentUserData.nome || currentUser.email
                 });
 
                 showNotification("Lead cadastrado com sucesso!");
                 addLeadForm.reset();
+                switchTab('leads');
 
             } catch (error) {
                 console.error("Erro ao adicionar lead:", error);
@@ -541,8 +634,9 @@
         });
 
         function loadLeads() {
+            if (unsubscribeLeads) unsubscribeLeads(); // Unsubscribe from previous listener
             const leadsCollection = collection(db, `/artifacts/${appId}/public/data/leads`);
-            onSnapshot(leadsCollection, (snapshot) => {
+            unsubscribeLeads = onSnapshot(leadsCollection, (snapshot) => {
                 const leadsList = document.getElementById('leads-list');
                 leadsList.innerHTML = ''; // Limpa a lista
                 if (snapshot.empty) {
@@ -588,10 +682,12 @@
         
         // --- LÓGICA DE HISTÓRICO E FILTROS ---
         function loadHistory() {
+            if (unsubscribeHistory) unsubscribeHistory(); // Unsubscribe from previous listener
             const leadsCollection = collection(db, `/artifacts/${appId}/public/data/leads`);
-            onSnapshot(leadsCollection, (snapshot) => {
+            unsubscribeHistory = onSnapshot(leadsCollection, (snapshot) => {
                 allLeads = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 renderHistory();
+                updateDashboardStats(); // Atualiza o dashboard com os novos dados
             });
 
             // Adiciona listeners aos filtros
@@ -641,11 +737,26 @@
                 historicoList.appendChild(tr);
             });
         }
+        
+        function updateDashboardStats() {
+            if (!currentUser) return;
+
+            const totalLeads = allLeads.length;
+            const convertedLeads = allLeads.filter(lead => lead.converted).length;
+            const myLeads = allLeads.filter(lead => lead.promotorId === currentUser.uid).length;
+            const conversionRate = totalLeads > 0 ? ((convertedLeads / totalLeads) * 100).toFixed(1) : 0;
+
+            document.getElementById('stats-total-leads').textContent = totalLeads;
+            document.getElementById('stats-converted-leads').textContent = convertedLeads;
+            document.getElementById('stats-conversion-rate').textContent = `${conversionRate}%`;
+            document.getElementById('stats-my-leads').textContent = myLeads;
+        }
 
         // --- LÓGICA DE USUÁRIOS ---
         const addUserForm = document.getElementById('add-user-form');
         addUserForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            const nome = document.getElementById('new-user-nome').value;
             const email = document.getElementById('new-user-email').value;
             const password = document.getElementById('new-user-password').value;
             const role = document.getElementById('new-user-role').value;
@@ -663,12 +774,13 @@
                 // Salva o perfil do usuário no Firestore
                 await setDoc(doc(db, `/artifacts/${appId}/public/data/users`, user.uid), {
                     uid: user.uid,
-                    email: user.email,
+                    nome: nome,
+                    email: email,
                     role: role
                 });
                 
                 // O admin permanece logado. A sessão principal não é afetada.
-                showNotification(`Usuário ${email} criado com o perfil ${role}.`);
+                showNotification(`Usuário ${nome} criado com o perfil ${role}.`);
                 addUserForm.reset();
 
             } catch (error) {
@@ -678,18 +790,20 @@
         });
 
         function loadUsers() {
+            if (unsubscribeUsers) unsubscribeUsers(); // Unsubscribe from previous listener
             const usersCollection = collection(db, `/artifacts/${appId}/public/data/users`);
-            onSnapshot(usersCollection, (snapshot) => {
+            unsubscribeUsers = onSnapshot(usersCollection, (snapshot) => {
                 const usersList = document.getElementById('users-list');
                 usersList.innerHTML = '';
                  if (snapshot.empty) {
-                    usersList.innerHTML = `<tr><td colspan="2" class="text-center py-4">Nenhum usuário encontrado.</td></tr>`;
+                    usersList.innerHTML = `<tr><td colspan="3" class="text-center py-4">Nenhum usuário encontrado.</td></tr>`;
                     return;
                 }
                 snapshot.docs.forEach(doc => {
                     const user = doc.data();
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
+                        <td class="py-3 px-4">${user.nome || ''}</td>
                         <td class="py-3 px-4">${user.email}</td>
                         <td class="py-3 px-4">${user.role.charAt(0).toUpperCase() + user.role.slice(1)}</td>
                     `;
