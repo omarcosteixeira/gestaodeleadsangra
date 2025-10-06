@@ -114,7 +114,15 @@
 
         // --- Variáveis de Configuração e Globais ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'gestaodeleadsangra';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { /* Fallback config */ };
+        // FIX: Added a valid fallback configuration to prevent fatal initialization error.
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
         
         const LEADS_COLLECTION_PATH = `artifacts/${appId}/public/data/leads`;
         const USERS_COLLECTION_PATH = `artifacts/${appId}/public/data/users`;
@@ -127,6 +135,8 @@
         let currentView = 'cadastro';
         let unsubscribeLeads = () => {};
         let unsubscribeUsers = () => {};
+        let filterState = { acao: '', dia: '', promotorId: '', converted: 'all' };
+
 
         const ROLES = { PROMOTOR: 'Promotor', QG: 'QG', LIDER_FDV: 'Líder/FDV' };
         const PERMISSION_LEVELS = { [ROLES.PROMOTOR]: 1, [ROLES.QG]: 2, [ROLES.LIDER_FDV]: 3 };
@@ -283,13 +293,12 @@
                 const isFirstUser = allUsersSnapshot.empty;
                 const newRole = isFirstUser ? ROLES.LIDER_FDV : ROLES.PROMOTOR;
                 
-                // FIX: Check if email exists before calling .split()
                 const defaultName = email ? email.split('@')[0] : `user_${uid.substring(0, 6)}`;
 
                 const newProfile = {
                     email: email,
                     role: newRole,
-                    name: name || defaultName, // Usa o nome fornecido ou o padrão seguro
+                    name: name || defaultName,
                     createdAt: serverTimestamp(),
                 };
                 await setDoc(userDocRef, newProfile);
@@ -334,7 +343,6 @@
                         return;
                     }
                     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-                    // Cria o perfil imediatamente após o registro
                     await fetchUserProfile(userCredential.user.uid, email, name);
                 }
             } catch (error) {
@@ -415,6 +423,12 @@
                     </div>
                 </div>`;
         }
+        
+        function showMessage(el, message, isError) {
+            el.textContent = message;
+            el.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700');
+            el.classList.add(isError ? 'bg-red-100' : 'bg-green-100', isError ? 'text-red-700' : 'text-green-700');
+        }
 
         // --- 4. Cadastro de Leads ---
         function renderRegistration() {
@@ -474,20 +488,237 @@
             const form = e.target;
             const btn = document.getElementById('btn-save-lead');
             const msgEl = document.getElementById('registration-message');
-            // ... (Lógica de validação e salvamento do handleSaveLead original)
+            
+            msgEl.classList.add('hidden');
+            btn.disabled = true;
+
+            const formData = {
+                acao: form.acao.value,
+                nome: form.nome.value,
+                telefone: form.telefone.value,
+                email: form.email.value,
+                cpf: form.cpf.value,
+                cursoInteresse: form.cursoInteresse.value
+            };
+
+            if (!formData.acao || !formData.nome || !formData.telefone) {
+                showMessage(msgEl, 'Por favor, preencha os campos obrigatórios.', true);
+                btn.disabled = false;
+                return;
+            }
+
+            const cleanedPhone = formatPhone(formData.telefone);
+            const cleanedCpf = formatCpf(formData.cpf);
+
+            const duplicateExists = leadsData.some(lead => {
+                const isPhoneDuplicate = cleanedPhone && formatPhone(lead.telefone) === cleanedPhone;
+                const isCpfDuplicate = cleanedCpf && formatCpf(lead.cpf) === cleanedCpf;
+                return isPhoneDuplicate || isCpfDuplicate;
+            });
+
+            if (duplicateExists) {
+                showMessage(msgEl, 'ERRO: Lead já cadastrado (Telefone ou CPF duplicado).', true);
+                btn.disabled = false;
+                return;
+            }
+
+            try {
+                await addDoc(collection(db, LEADS_COLLECTION_PATH), {
+                    ...formData,
+                    telefone: cleanedPhone,
+                    cpf: cleanedCpf,
+                    converted: false,
+                    createdAt: serverTimestamp(),
+                    promotorId: currentUser.uid,
+                    promotorName: currentUser.name
+                });
+                showMessage(msgEl, 'Lead cadastrado com sucesso!', false);
+                form.reset();
+            } catch (error) {
+                console.error("Erro ao salvar o lead:", error);
+                showMessage(msgEl, 'Erro ao salvar o lead. Tente novamente.', true);
+            } finally {
+                btn.disabled = false;
+            }
         }
 
         async function handleCSVImport() {
-            // ... (código da função handleCSVImport já existente) ...
+            const fileInput = document.getElementById('csv-file-input');
+            const resultsEl = document.getElementById('csv-import-results');
+            const btn = document.getElementById('btn-import-csv');
+            if (!fileInput.files.length) {
+                resultsEl.innerHTML = `<p class="text-red-600 p-3 bg-red-50 rounded-lg">Por favor, selecione um arquivo CSV.</p>`;
+                return;
+            }
+            btn.disabled = true;
+            resultsEl.innerHTML = '';
+
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+
+            reader.onload = async (event) => {
+                const text = event.target.result;
+                const rows = text.split(/\r?\n/).filter(row => row.trim() !== '');
+                if (rows.length < 2) {
+                    resultsEl.innerHTML = `<p class="text-red-600 p-3 bg-red-50 rounded-lg">Arquivo CSV vazio ou sem dados.</p>`;
+                    btn.disabled = false;
+                    return;
+                }
+
+                const header = rows[0].split(',').map(h => h.trim());
+                const leadsToImport = [];
+                const errors = [];
+                
+                for (let i = 1; i < rows.length; i++) {
+                    const values = rows[i].split(',');
+                    const leadData = header.reduce((obj, key, index) => ({...obj, [key]: values[index] ? values[index].trim() : '' }), {});
+                    
+                    if (!leadData.acao || !leadData.nome || !leadData.telefone) {
+                        errors.push(`Linha ${i + 1}: Campos obrigatórios (acao, nome, telefone) faltando.`);
+                        continue;
+                    }
+
+                    const cleanedPhone = formatPhone(leadData.telefone);
+                    const cleanedCpf = formatCpf(leadData.cpf);
+
+                    if (leadsData.some(lead => formatPhone(lead.telefone) === cleanedPhone || (cleanedCpf && formatCpf(lead.cpf) === cleanedCpf))) {
+                        errors.push(`Linha ${i + 1}: Lead com telefone ou CPF já existe no sistema.`);
+                        continue;
+                    }
+
+                    leadsToImport.push({
+                        ...leadData,
+                        telefone: cleanedPhone,
+                        cpf: cleanedCpf,
+                        converted: false,
+                        createdAt: serverTimestamp(),
+                        promotorId: currentUser.uid,
+                        promotorName: currentUser.name
+                    });
+                }
+
+                if (leadsToImport.length > 0) {
+                    try {
+                        const batch = writeBatch(db);
+                        leadsToImport.forEach(lead => {
+                            const newLeadRef = doc(collection(db, LEADS_COLLECTION_PATH));
+                            batch.set(newLeadRef, lead);
+                        });
+                        await batch.commit();
+                        resultsEl.innerHTML += `<div class="p-3 bg-green-50 text-green-700 rounded-lg fade-in">${leadsToImport.length} leads importados com sucesso!</div>`;
+                    } catch (error) {
+                         resultsEl.innerHTML += `<div class="p-3 bg-red-50 text-red-700 rounded-lg fade-in">Erro ao salvar leads: ${error.message}</div>`;
+                    }
+                }
+                
+                if (errors.length > 0) {
+                     resultsEl.innerHTML += `<div class="p-3 bg-yellow-50 text-yellow-700 rounded-lg mt-2 fade-in"><strong>Avisos:</strong><ul>${errors.map(e => `<li class="ml-4 list-disc">${e}</li>`).join('')}</ul></div>`;
+                }
+
+                fileInput.value = '';
+                btn.disabled = false;
+            };
+            reader.readAsText(file);
         }
 
         // --- 5. Histórico de Leads ---
         function renderHistory() {
-            // ... (implementação completa da renderização do histórico)
+            const historyEl = document.getElementById('view-historico');
+            const uniqueActions = [...new Set(leadsData.map(lead => lead.acao).filter(Boolean))].sort();
+            const promotors = [...new Map(usersData.map(user => [user.id, user.name])).values()].filter(Boolean).sort();
+
+
+            historyEl.innerHTML = `
+                <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-blue-500 pb-2 mb-4">Acesso e Histórico de Leads</h2>
+                <div class="bg-white p-6 rounded-xl shadow-lg grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 border" id="filter-container">
+                    ${renderFilterSelect("Ação", "acao", uniqueActions, filterState.acao, ICONS.TAG)}
+                    ${renderFilterDate("Dia", "dia", filterState.dia, ICONS.CALENDAR)}
+                    ${renderFilterSelect("Promotor", "promotorId", promotors, filterState.promotorId, ICONS.USER)}
+                    ${renderFilterStatus("Status", "converted", filterState.converted, ICONS.CHECK)}
+                    <div class='flex items-end'>
+                        <button id="btn-clear-filters" class="w-full bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg">Limpar</button>
+                    </div>
+                </div>
+                <div id="leads-table-container" class="mt-8"></div>
+            `;
+            
+            document.getElementById('filter-container').addEventListener('change', (e) => handleFilterChange(e.target.name, e.target.value));
+            document.getElementById('btn-clear-filters').addEventListener('click', handleClearFilters);
+            
+            renderLeadsTable();
+        }
+        
+        function renderFilterSelect(label, name, options, currentValue, iconHTML) { return `<div><label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">${iconHTML.replace('h-5 w-5','h-4 w-4').replace('mr-2 inline-block','mr-1 text-blue-500')} ${label}</label><select id="${name}" name="${name}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border"><option value="">-- Todos --</option>${options.map(opt => `<option value="${opt}" ${opt === currentValue ? 'selected' : ''}>${opt}</option>`).join('')}</select></div>`; }
+        function renderFilterDate(label, name, currentValue, iconHTML) { return `<div><label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">${iconHTML.replace('h-5 w-5','h-4 w-4').replace('mr-2 inline-block','mr-1 text-blue-500')} ${label}</label><input type="date" name="${name}" id="${name}" value="${currentValue}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border"/></div>`; }
+        function renderFilterStatus(label, name, currentValue, iconHTML) { return `<div><label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">${iconHTML.replace('h-5 w-5','h-4 w-4').replace('mr-2 inline-block','mr-1 text-blue-500')} ${label}</label><select id="${name}" name="${name}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border"><option value="all" ${currentValue === 'all' ? 'selected' : ''}>Todos</option><option value="true" ${currentValue === 'true' ? 'selected' : ''}>Convertido</option><option value="false" ${currentValue === 'false' ? 'selected' : ''}>Pendente</option></select></div>`; }
+
+        function handleFilterChange(name, value) {
+            filterState[name] = value;
+            renderLeadsTable();
+        }
+        function handleClearFilters() {
+            filterState = { acao: '', dia: '', promotorId: '', converted: 'all' };
+            renderHistory();
+        }
+
+        function filterLeads() {
+            let filtered = [...leadsData];
+            if (filterState.acao) filtered = filtered.filter(lead => lead.acao === filterState.acao);
+            if (filterState.dia) {
+                const filterDate = new Date(filterState.dia);
+                filtered = filtered.filter(lead => lead.createdAt && lead.createdAt.toDate().toDateString() === filterDate.toDateString());
+            }
+            if (filterState.promotorId) filtered = filtered.filter(lead => lead.promotorName === filterState.promotorId);
+            if (filterState.converted !== 'all') filtered = filtered.filter(lead => String(lead.converted) === filterState.converted);
+            return filtered.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
         }
         
         function renderLeadsTable() {
-            // ... (implementação completa da renderização da tabela)
+            const container = document.getElementById('leads-table-container');
+            const filteredLeads = filterLeads();
+
+            let tableHTML = `<div class="overflow-x-auto bg-white rounded-xl shadow-2xl border"><table class="min-w-full divide-y divide-gray-200"><thead class="bg-blue-50"><tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ação/Data</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nome/Contato</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">Curso/Promotor</th>
+                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Conversão</th>
+                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Ações</th>
+                </tr></thead><tbody class="bg-white divide-y divide-gray-200">`;
+
+            if (filteredLeads.length === 0) {
+                tableHTML += `<tr><td colSpan="5" class="px-6 py-4 text-center text-gray-500">Nenhum lead encontrado.</td></tr>`;
+            } else {
+                filteredLeads.forEach(lead => {
+                    const promotorName = lead.promotorName || usersData.find(u => u.id === lead.promotorId)?.name || 'Desconhecido';
+                    tableHTML += `<tr class="hover:bg-blue-50">
+                        <td class="px-6 py-4"><div class="font-medium text-gray-900">${lead.acao}</div><div class="text-xs text-gray-500">${formatDate(lead.createdAt)}</div></td>
+                        <td class="px-6 py-4"><div class="font-semibold text-blue-600">${lead.nome}</div><div class="text-xs text-gray-500">${lead.telefone}</div></td>
+                        <td class="px-6 py-4 hidden sm:table-cell"><div class="text-sm">${lead.cursoInteresse || 'N/A'}</div><div class="text-xs text-gray-500">${promotorName}</div></td>
+                        <td class="px-6 py-4 text-center"><button data-lead-id="${lead.id}" data-status="${lead.converted}" class="toggle-conversion-btn px-3 py-1 rounded-full text-xs font-bold ${lead.converted ? 'bg-green-500 text-white' : 'bg-red-100 text-red-700'}">${lead.converted ? 'CONVERTIDO' : 'PENDENTE'}</button></td>
+                        <td class="px-6 py-4 text-center"><a href="https://wa.me/55${lead.telefone}" target="_blank" class="text-green-600 hover:text-green-800">WhatsApp</a></td>
+                    </tr>`;
+                });
+            }
+            tableHTML += `</tbody></table></div>`;
+            container.innerHTML = tableHTML;
+            
+            container.addEventListener('click', e => {
+                if (e.target.classList.contains('toggle-conversion-btn')) {
+                    const { leadId, status } = e.target.dataset;
+                    handleConversionToggle(leadId, status === 'true');
+                }
+            })
+        }
+
+        async function handleConversionToggle(leadId, currentStatus) {
+            if (!db) return;
+            try {
+                const docRef = doc(db, LEADS_COLLECTION_PATH, leadId);
+                await updateDoc(docRef, { converted: !currentStatus });
+            } catch (error) {
+                console.error("Erro ao atualizar status:", error);
+                alert("Você não tem permissão para alterar este lead.");
+            }
         }
         
         // --- 6. Painel de Administração ---
