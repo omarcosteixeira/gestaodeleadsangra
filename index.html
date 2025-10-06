@@ -24,19 +24,8 @@
                     <svg xmlns="http://www.w3.org/2000/svg" class="inline-block mr-2 h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="18" x2="12" y2="22"/></svg>
                     Gestão de Leads Angra
                 </h1>
-                <nav class="flex space-x-2 sm:space-x-4">
-                    <button id="nav-dashboard" class="nav-item flex items-center space-x-1 p-2 rounded-lg transition-all text-sm bg-blue-600 text-white font-semibold" data-view="dashboard">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                        <span class="hidden sm:inline">Painel Principal</span>
-                    </button>
-                    <button id="nav-cadastro" class="nav-item flex items-center space-x-1 p-2 rounded-lg transition-all text-sm text-blue-200 hover:bg-blue-700 hover:text-white" data-view="cadastro">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                        <span class="hidden sm:inline">Cadastrar Lead</span>
-                    </button>
-                    <button id="nav-historico" class="nav-item flex items-center space-x-1 p-2 rounded-lg transition-all text-sm text-blue-200 hover:bg-blue-700 hover:text-white" data-view="historico">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="10" y1="10" x2="21" y2="21"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7"/></svg>
-                        <span class="hidden sm:inline">Histórico / Acesso</span>
-                    </button>
+                <nav id="main-nav" class="flex space-x-2 sm:space-x-4">
+                    <!-- Nav items will be dynamically injected here based on user role -->
                 </nav>
                 <div class="flex items-center space-x-4 mt-2 md:mt-0">
                     <div id="promotor-id-display" class="text-sm p-2 bg-blue-700 rounded-lg text-blue-200 shadow-inner hidden lg:block">
@@ -56,6 +45,7 @@
                 <div id="view-dashboard" class="view-content space-y-8"></div>
                 <div id="view-cadastro" class="view-content space-y-8 hidden"></div>
                 <div id="view-historico" class="view-content space-y-8 hidden"></div>
+                <div id="view-admin" class="view-content space-y-8 hidden"></div>
             </div>
         </main>
 
@@ -94,14 +84,11 @@
             onSnapshot, 
             serverTimestamp, 
             doc, 
+            getDocs,
+            setDoc,
             setLogLevel 
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // NOTA IMPORTANTE SOBRE PERMISSÕES:
-        // Se você está recebendo o erro "Missing or insufficient permissions", 
-        // você PRECISA atualizar as Regras de Segurança do seu Firestore.
-        // Consulte o arquivo REGRAS_DE_SEGURANCA.md para o código de regras correto.
-        
         // Configuração do Firebase (Hardcoded para GitHub Pages)
         const firebaseConfig = {
             apiKey: "AIzaSyAY-rGNBHMsT5QqHHvNsZ9VzB3kyHtYPks",
@@ -112,17 +99,49 @@
             appId: "1:706992622509:web:b091d4e27920d7d85e2f24"
         };
         const appId = firebaseConfig.projectId; 
-        const COLLECTION_PATH = `artifacts/${appId}/public/data/leads`;
+        const LEADS_COLLECTION_PATH = `artifacts/${appId}/public/data/leads`;
+        const USERS_COLLECTION_PATH = `artifacts/${appId}/public/data/users`; // Nova coleção para perfis
 
         // Variáveis de Estado Global
         let db;
         let auth;
         let currentUserId = null;
         let fullUserId = null;
+        let currentUserRole = null; // Novo: Armazena o perfil do usuário logado
         let leadsData = [];
-        let currentView = 'dashboard';
+        let usersData = []; // Novo: Armazena todos os usuários e seus perfis
+        let currentView = 'cadastro'; // Começa no cadastro para Promotores
+        
+        // --- Configuração de Perfis (RBAC) ---
+        const ROLES = {
+            PROMOTOR: 'Promotor',
+            QG: 'QG',
+            LIDER_FDV: 'Líder/FDV'
+        };
 
-        // --- Helpers de Formatação e UI ---
+        // Define a hierarquia de acesso: 1 (mínimo) a 3 (máximo)
+        const PERMISSION_LEVELS = {
+            [ROLES.PROMOTOR]: 1,
+            [ROLES.QG]: 2,
+            [ROLES.LIDER_FDV]: 3
+        };
+        
+        // Define o acesso necessário para cada view
+        const VIEW_PERMISSIONS = {
+            'dashboard': PERMISSION_LEVELS[ROLES.QG],
+            'cadastro': PERMISSION_LEVELS[ROLES.PROMOTOR],
+            'historico': PERMISSION_LEVELS[ROLES.QG],
+            'admin': PERMISSION_LEVELS[ROLES.LIDER_FDV], // Novo painel de admin
+        };
+        
+        // Função para verificar se o usuário pode acessar a view
+        function canView(viewName) {
+            const requiredLevel = VIEW_PERMISSIONS[viewName];
+            const userLevel = PERMISSION_LEVELS[currentUserRole] || 0;
+            return userLevel >= requiredLevel;
+        }
+
+        // --- Helpers de Formatação e UI (ICONS, formatX, etc. - Sem mudanças) ---
 
         const formatCpf = (cpf) => cpf ? cpf.replace(/\D/g, '') : '';
         const formatPhone = (phone) => phone ? phone.replace(/\D/g, '') : '';
@@ -148,13 +167,21 @@
             LIST: generateIcon('<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>'),
             SEARCH: generateIcon('<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>'),
             CALENDAR: generateIcon('<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>'),
-            HASH: generateIcon('<line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/>')
+            HASH: generateIcon('<line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/>'),
+            USERS_SQUARE: generateIcon('<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/>') // Novo Ícone para Admin
         };
-
 
         // --- Funções de Navegação e UI ---
 
         function renderView(viewName) {
+            // Se o usuário não tem permissão para a view atual, redireciona
+            if (!canView(viewName)) {
+                // Tenta encontrar a view de maior permissão que ele pode acessar
+                if (canView('cadastro')) viewName = 'cadastro';
+                else if (canView('dashboard')) viewName = 'dashboard';
+                else viewName = 'cadastro'; // Garante que Promotor caia no cadastro
+            }
+
             const views = document.querySelectorAll('.view-content');
             views.forEach(view => view.classList.add('hidden'));
             
@@ -175,47 +202,84 @@
             // Renderiza o conteúdo específico da view
             if (viewName === 'dashboard') renderDashboard();
             if (viewName === 'historico') renderHistory();
+            if (viewName === 'admin') renderAdminPanel(); // Novo
         }
+
+        function renderNav() {
+            const nav = document.getElementById('main-nav');
+            let navHTML = '';
+
+            const navConfig = [
+                { view: 'cadastro', label: 'Cadastrar Lead', icon: '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>' },
+                { view: 'dashboard', label: 'Painel Principal', icon: '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>' },
+                { view: 'historico', label: 'Histórico / Acesso', icon: '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="10" y1="10" x2="21" y2="21"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7"/></svg>' },
+                { view: 'admin', label: 'Gerenciar Usuários', icon: ICONS.USERS_SQUARE.replace('h-5 w-5 mr-2 inline-block', 'h-4 w-4') }
+            ];
+
+            navConfig.forEach(item => {
+                if (canView(item.view)) {
+                    const isActive = item.view === currentView;
+                    const classes = isActive 
+                        ? "bg-blue-600 text-white font-semibold" 
+                        : "text-blue-200 hover:bg-blue-700 hover:text-white";
+                        
+                    navHTML += `
+                        <button class="nav-item flex items-center space-x-1 p-2 rounded-lg transition-all text-sm ${classes}" data-view="${item.view}">
+                            ${item.icon}
+                            <span class="hidden sm:inline">${item.label}</span>
+                        </button>
+                    `;
+                }
+            });
+            nav.innerHTML = navHTML;
+            
+            // Re-adiciona os listeners de navegação
+            document.querySelectorAll('.nav-item').forEach(btn => {
+                btn.addEventListener('click', (e) => renderView(e.currentTarget.dataset.view));
+            });
+        }
+
 
         // --- 1. Inicialização do Firebase e Autenticação ---
 
         function initApp() {
             try {
-                // setLogLevel('debug'); // Descomente para ver logs do Firebase
+                // setLogLevel('debug'); 
                 const app = initializeApp(firebaseConfig);
                 auth = getAuth(app);
                 db = getFirestore(app);
 
                 // Listener de autenticação
-                onAuthStateChanged(auth, (user) => {
+                onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         currentUserId = user.uid;
                         fullUserId = user.uid;
                         
+                        // Busca ou cria o perfil do usuário
+                        await fetchUserProfile(user.uid, user.email);
+
                         document.getElementById('auth-screen').classList.add('hidden');
                         document.getElementById('app-container').classList.remove('hidden');
                         
                         document.getElementById('promotor-id-display').innerHTML = `
                             ${ICONS.USER}
-                            Promotor ID: <span class="font-mono text-xs">${fullUserId.substring(0, 8)}...</span>
+                            ${currentUserRole}: <span class="font-mono text-xs">${fullUserId.substring(0, 8)}...</span>
                         `;
                         
-                        // Inicia o listener de leads
+                        renderNav();
                         setupLeadsListener();
+                        setupUsersListener(); // Novo listener de usuários
                         renderView(currentView);
                     } else {
                         currentUserId = null;
                         fullUserId = null;
+                        currentUserRole = null;
                         document.getElementById('app-container').classList.add('hidden');
                         document.getElementById('auth-screen').classList.remove('hidden');
-                        renderAuthScreen(true); // Sempre começa no login
+                        renderAuthScreen(true);
                     }
                 });
 
-                // Adiciona listeners de navegação
-                document.querySelectorAll('.nav-item').forEach(btn => {
-                    btn.addEventListener('click', (e) => renderView(e.currentTarget.dataset.view));
-                });
                 document.getElementById('btn-logout').addEventListener('click', handleLogout);
 
             } catch (error) {
@@ -223,6 +287,32 @@
                 document.getElementById('auth-card').innerHTML = `<div class="p-4 bg-red-100 text-red-700 rounded-lg">Erro fatal ao carregar o Firebase. Verifique sua conexão e console.</div>`;
             }
         }
+        
+        async function fetchUserProfile(uid, email) {
+            const userDocRef = doc(db, USERS_COLLECTION_PATH, uid);
+            const userDocSnapshot = await getDocs(query(collection(db, USERS_COLLECTION_PATH))); // Busca todos temporariamente para RBAC
+            
+            const userData = userDocSnapshot.docs.find(doc => doc.id === uid);
+
+            if (userData && userData.exists) {
+                // Usuário já cadastrado, define o perfil
+                currentUserRole = userData.data().role || ROLES.PROMOTOR;
+            } else {
+                // Novo usuário! O primeiro usuário a se registrar é o Líder/FDV (Admin) por padrão.
+                // Outros usuários serão Promotores por padrão e podem ter o perfil elevado por um Líder/FDV.
+                const allUsers = userDocSnapshot.docs;
+                const newRole = allUsers.length === 0 ? ROLES.LIDER_FDV : ROLES.PROMOTOR;
+
+                await setDoc(userDocRef, {
+                    email: email,
+                    role: newRole,
+                    createdAt: serverTimestamp(),
+                });
+                currentUserRole = newRole;
+            }
+        }
+
+        // ... (renderAuthScreen e handleAuth sem mudanças funcionais) ...
 
         function renderAuthScreen(isLogin) {
             const authCard = document.getElementById('auth-card');
@@ -302,12 +392,11 @@
         }
 
 
-        // --- 2. Listener de Leads (onSnapshot) ---
+        // --- 2. Listeners de Dados ---
 
         function setupLeadsListener() {
             if (!db) return;
-
-            const leadsCollectionRef = collection(db, COLLECTION_PATH);
+            const leadsCollectionRef = collection(db, LEADS_COLLECTION_PATH);
             const q = query(leadsCollectionRef);
 
             onSnapshot(q, (snapshot) => {
@@ -315,7 +404,6 @@
                     id: doc.id,
                     ...doc.data()
                 }));
-                // Re-renderiza a view atual com os novos dados
                 if (currentUserId) renderView(currentView); 
             }, (error) => {
                 console.error("Erro ao ouvir leads:", error);
@@ -323,8 +411,32 @@
                 // ele não será corrigido aqui no código JS, mas sim no console do Firebase.
             });
         }
+        
+        function setupUsersListener() {
+            if (!db) return;
+            const usersCollectionRef = collection(db, USERS_COLLECTION_PATH);
+            const q = query(usersCollectionRef);
+
+            onSnapshot(q, (snapshot) => {
+                usersData = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                // Se o próprio perfil foi atualizado, precisamos re-renderizar a nav e a view.
+                const myProfile = usersData.find(u => u.id === currentUserId);
+                if (myProfile && myProfile.role !== currentUserRole) {
+                    currentUserRole = myProfile.role;
+                    renderNav();
+                }
+                if (currentUserId && currentView === 'admin') renderAdminPanel();
+            }, (error) => {
+                console.error("Erro ao ouvir usuários:", error);
+            });
+        }
+
 
         // --- 3. Dashboard ---
+        // ... (renderDashboard e calculateStats sem mudanças) ...
 
         function renderDashboard() {
             const stats = calculateStats();
@@ -377,6 +489,7 @@
         }
 
         // --- 4. Cadastro de Leads ---
+        // ... (renderRegistration, handleSaveLead sem mudanças) ...
 
         function renderRegistration() {
             const formContainer = document.getElementById('view-cadastro');
@@ -487,7 +600,7 @@
                     promotorUserId: fullUserId,
                 };
 
-                const leadsCollectionRef = collection(db, COLLECTION_PATH);
+                const leadsCollectionRef = collection(db, LEADS_COLLECTION_PATH);
                 await addDoc(leadsCollectionRef, newLead);
 
                 showMessage(msgEl, 'Lead cadastrado com sucesso!', false);
@@ -518,6 +631,7 @@
         }
 
         // --- 5. Histórico de Leads ---
+        // ... (renderHistory e filterLeads sem mudanças) ...
         
         let filterState = { acao: '', dia: '', promotorId: '', converted: 'all' };
 
@@ -604,7 +718,7 @@
 
         function handleClearFilters() {
             filterState = { acao: '', dia: '', promotorId: '', converted: 'all' };
-            renderHistory(); // Re-renderiza o histórico para atualizar os inputs
+            renderHistory();
         }
 
         function filterLeads() {
@@ -728,20 +842,113 @@
         async function handleConversionToggle(leadId, currentStatus) {
             if (!db) return;
             try {
-                const docRef = doc(db, COLLECTION_PATH, leadId);
+                const docRef = doc(db, LEADS_COLLECTION_PATH, leadId);
                 await updateDoc(docRef, {
                     converted: !currentStatus
                 });
-                // A atualização de tela será feita automaticamente pelo onSnapshot
             } catch (error) {
                 console.error("Erro ao atualizar status de conversão:", error);
-                // Em um ambiente de produção, aqui se mostraria uma mensagem de erro na UI
+            }
+        }
+        
+        // --- 6. Painel de Administração de Usuários (NOVO) ---
+
+        function renderAdminPanel() {
+            const adminEl = document.getElementById('view-admin');
+            
+            // Só Líder/FDV pode ver e editar
+            if (currentUserRole !== ROLES.LIDER_FDV) {
+                adminEl.innerHTML = `<div class="p-6 bg-red-100 text-red-700 rounded-xl shadow-lg">Acesso negado. Apenas usuários com perfil "Líder/FDV" podem acessar este painel.</div>`;
+                return;
+            }
+
+            adminEl.innerHTML = `
+                <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-blue-500 pb-2 mb-4">Gerenciamento de Perfis de Usuários</h2>
+                <div class="bg-blue-50 p-4 rounded-xl shadow-inner mb-6 text-sm text-gray-700">
+                    <p><strong>Seu Perfil: ${currentUserRole} (Acesso Total)</strong></p>
+                    <p>O perfil de um novo usuário é definido como **Promotor** no primeiro login. Use esta tabela para elevar o perfil para **QG** ou **Líder/FDV**.</p>
+                </div>
+
+                <div class="overflow-x-auto bg-white rounded-xl shadow-2xl border border-gray-100">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email / ID do Usuário</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Perfil Atual</th>
+                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="users-table-body" class="bg-white divide-y divide-gray-200">
+                            ${usersData.map(user => renderUserRow(user)).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                <div id="admin-message" class="hidden mt-4 p-3 rounded-lg text-center font-medium shadow-md"></div>
+            `;
+            
+            // Adiciona listeners para os selects de perfil
+            document.querySelectorAll('.role-selector').forEach(select => {
+                select.addEventListener('change', (e) => handleRoleChange(e.target.dataset.uid, e.target.value));
+            });
+        }
+
+        function renderUserRow(user) {
+            // Apenas o Líder/FDV pode alterar, e ninguém pode alterar a si mesmo.
+            const isEditable = currentUserRole === ROLES.LIDER_FDV && user.id !== currentUserId;
+            const selectOptions = Object.values(ROLES).map(role => 
+                `<option value="${role}" ${user.role === role ? 'selected' : ''}>${role}</option>`
+            ).join('');
+
+            return `
+                <tr class="hover:bg-blue-50 transition-all">
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="text-sm font-semibold text-gray-800">${user.email || 'N/A'}</div>
+                        <div class="text-xs text-gray-500 font-mono">UID: ${user.id}</div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-3 py-1 rounded-full text-xs font-bold shadow-md ${
+                            user.role === ROLES.LIDER_FDV ? 'bg-purple-500 text-white' : 
+                            user.role === ROLES.QG ? 'bg-blue-500 text-white' : 
+                            'bg-gray-200 text-gray-700'
+                        }">
+                            ${user.role}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-center">
+                        ${isEditable ? `
+                            <select 
+                                data-uid="${user.id}" 
+                                class="role-selector block w-full rounded-lg border-gray-300 shadow-sm p-2 border focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white"
+                            >
+                                ${selectOptions}
+                            </select>
+                        ` : (user.id === currentUserId ? 'Seu Perfil' : 'Sem Permissão')}
+                    </td>
+                </tr>
+            `;
+        }
+
+        async function handleRoleChange(uid, newRole) {
+            if (!db || currentUserRole !== ROLES.LIDER_FDV) return;
+
+            const msgEl = document.getElementById('admin-message');
+            msgEl.classList.add('hidden');
+
+            try {
+                const docRef = doc(db, USERS_COLLECTION_PATH, uid);
+                await updateDoc(docRef, {
+                    role: newRole
+                });
+                showMessage(msgEl, `Perfil do usuário ${uid.substring(0, 8)}... atualizado para ${newRole} com sucesso!`, false);
+
+            } catch (error) {
+                console.error("Erro ao atualizar o perfil do usuário:", error);
+                showMessage(msgEl, 'Erro ao atualizar o perfil. Verifique as Regras de Segurança e a conexão.', true);
             }
         }
         
         // --- Inicialização ---
 
-        // Chama renderRegistration() uma vez, pois é estático (formulário)
         window.addEventListener('load', () => {
             initApp();
             renderRegistration(); 
@@ -749,6 +956,7 @@
 
         // Torna a função globalmente acessível para ser chamada pelo onclick="" no HTML gerado
         window.handleConversionToggle = handleConversionToggle;
+        
     </script>
 </body>
 </html>
