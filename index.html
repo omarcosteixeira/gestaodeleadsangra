@@ -115,7 +115,6 @@
         // --- Variáveis de Configuração e Globais ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'gestaodeleadsangra';
         
-        // FIX: Replaced placeholder config with the original, valid configuration.
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
             apiKey: "AIzaSyAY-rGNBHMsT5QqHHvNsZ9VzB3kyHtYPks",
             authDomain: "gestaodeleadsangra.firebaseapp.com",
@@ -266,7 +265,6 @@
             `;
             document.getElementById('footer-content').innerText = "Sistema de Gestão de Leads | Criado por Marcos Teixeira";
             
-            // Define a view inicial com base no perfil do usuário
             if (canView('dashboard')) {
                 currentView = 'dashboard';
             } else {
@@ -296,11 +294,22 @@
             if (userDocSnap.exists()) {
                 return userDocSnap.data();
             } else {
-                const usersQuery = query(collection(db, USERS_COLLECTION_PATH));
-                const allUsersSnapshot = await getDocs(usersQuery);
-                const isFirstUser = allUsersSnapshot.empty;
+                // FIX: This block now handles the creation of the first user more robustly.
+                let isFirstUser = false;
+                try {
+                    // This query checks if there are any other users in the database.
+                    const usersQuery = query(collection(db, USERS_COLLECTION_PATH));
+                    const allUsersSnapshot = await getDocs(usersQuery);
+                    isFirstUser = allUsersSnapshot.empty;
+                } catch (error) {
+                    // If the query fails (e.g., on a brand new database), assume this is the first user.
+                    // This prevents the registration from failing.
+                    console.warn("Could not query users collection to determine role.", error);
+                    console.warn("Assuming this is the first user registration and assigning Admin role.");
+                    isFirstUser = true; 
+                }
+
                 const newRole = isFirstUser ? ROLES.LIDER_FDV : ROLES.PROMOTOR;
-                
                 const defaultName = email ? email.split('@')[0] : `user_${uid.substring(0, 6)}`;
 
                 const newProfile = {
@@ -354,7 +363,6 @@
                     await fetchUserProfile(userCredential.user.uid, email, name);
                 }
             } catch (error) {
-                // FIX: Improved error handling to be more specific.
                 console.error("Authentication Error:", error);
                 let msg = 'Ocorreu um erro. Verifique o console para mais detalhes.';
                 if (error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
@@ -810,6 +818,4 @@
     </script>
 </body>
 </html>
-
-
 
