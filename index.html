@@ -114,14 +114,15 @@
 
         // --- Variáveis de Configuração e Globais ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'gestaodeleadsangra';
-        // FIX: Added a valid fallback configuration to prevent fatal initialization error.
+        
+        // FIX: Replaced placeholder config with the original, valid configuration.
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-            apiKey: "YOUR_API_KEY",
-            authDomain: "YOUR_AUTH_DOMAIN",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_STORAGE_BUCKET",
-            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-            appId: "YOUR_APP_ID"
+            apiKey: "AIzaSyAY-rGNBHMsT5QqHHvNsZ9VzB3kyHtYPks",
+            authDomain: "gestaodeleadsangra.firebaseapp.com",
+            projectId: "gestaodeleadsangra",
+            storageBucket: "gestaodeleadsangra.firebasestorage.app",
+            messagingSenderId: "706992622509",
+            appId: "1:706992622509:web:b091d4e27920d7d85e2f24"
         };
         
         const LEADS_COLLECTION_PATH = `artifacts/${appId}/public/data/leads`;
@@ -263,8 +264,15 @@
                     <span class="text-xs bg-blue-500 px-2 py-0.5 rounded-full">${currentUser.role}</span>
                 </div>
             `;
-            document.getElementById('footer-content').innerText = `Sistema de Gestão de Leads | ID do App: ${appId}`;
+            document.getElementById('footer-content').innerText = "Sistema de Gestão de Leads | Criado por Marcos Teixeira";
             
+            // Define a view inicial com base no perfil do usuário
+            if (canView('dashboard')) {
+                currentView = 'dashboard';
+            } else {
+                currentView = 'cadastro';
+            }
+
             setupDataListeners();
             renderNav();
             renderView(currentView);
@@ -346,11 +354,17 @@
                     await fetchUserProfile(userCredential.user.uid, email, name);
                 }
             } catch (error) {
-                let msg = 'Ocorreu um erro. Tente novamente.';
+                // FIX: Improved error handling to be more specific.
+                console.error("Authentication Error:", error);
+                let msg = 'Ocorreu um erro. Verifique o console para mais detalhes.';
                 if (error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
                     msg = 'Email ou senha incorretos.';
                 } else if (error.code === 'auth/email-already-in-use') {
-                    msg = 'Este email já está cadastrado.';
+                    msg = 'Este email já está cadastrado. Por favor, faça login.';
+                } else if (error.code === 'auth/weak-password') {
+                    msg = 'A senha deve ter pelo menos 6 caracteres.';
+                } else if (error.code === 'auth/invalid-email') {
+                    msg = 'O formato do email é inválido.';
                 }
                 msgEl.textContent = msg;
                 msgEl.classList.remove('hidden');
@@ -796,4 +810,6 @@
     </script>
 </body>
 </html>
+
+
 
