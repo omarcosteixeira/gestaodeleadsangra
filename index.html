@@ -6,6 +6,8 @@
     <title>Gestão de Leads Angra</title>
     <!-- Tailwind CSS CDN para estilos responsivos e modernos -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS (xlsx) CDN para manipulação de arquivos Excel -->
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     <!-- Google Fonts: Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,7 +17,7 @@
         /* Estilos globais para a fonte e transições */
         body { font-family: 'Inter', sans-serif; }
         .transition-all { transition: all 0.3s ease-in-out; }
-        /* Animação para resultados do CSV */
+        /* Animação para resultados da importação */
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
         .fade-in { animation: fadeIn 0.5s ease-out forwards; }
     </style>
@@ -157,6 +159,7 @@
             PERCENT: generateIcon('<line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>'),
             USER: generateIcon('<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'),
             UPLOAD: generateIcon('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>'),
+            DOWNLOAD: generateIcon('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>'),
             TAG: generateIcon('<path d="M20.59 13.41l-7.15 7.15a2.12 2.12 0 0 1-3-.01L3 13.25V4a1 1 0 0 1 1-1h9.25l7.34 7.34a2.12 2.12 0 0 1 0 3z"/><line x1="10" y1="10" x2="10.01" y2="10"/>'),
             PHONE: generateIcon('<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.08 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>'),
             MAIL: generateIcon('<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>'),
@@ -294,16 +297,12 @@
             if (userDocSnap.exists()) {
                 return userDocSnap.data();
             } else {
-                // FIX: This block now handles the creation of the first user more robustly.
                 let isFirstUser = false;
                 try {
-                    // This query checks if there are any other users in the database.
                     const usersQuery = query(collection(db, USERS_COLLECTION_PATH));
                     const allUsersSnapshot = await getDocs(usersQuery);
                     isFirstUser = allUsersSnapshot.empty;
                 } catch (error) {
-                    // If the query fails (e.g., on a brand new database), assume this is the first user.
-                    // This prevents the registration from failing.
                     console.warn("Could not query users collection to determine role.", error);
                     console.warn("Assuming this is the first user registration and assigning Admin role.");
                     isFirstUser = true; 
@@ -475,20 +474,20 @@
                     </div>
                     <!-- Importação em Lote -->
                     <div>
-                        <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-green-500 pb-2 mb-4">Importar Leads em Lote</h2>
+                        <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-green-500 pb-2 mb-4">Importar Leads (Excel)</h2>
                         <div class="bg-white p-6 md:p-8 rounded-xl shadow-2xl border border-gray-100 space-y-4">
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Arquivo CSV</label>
-                                <input type="file" id="csv-file-input" accept=".csv" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Arquivo Excel (.xlsx)</label>
+                                <input type="file" id="file-import-input" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
                             </div>
                             <p class="text-xs text-gray-500">O arquivo deve ter as colunas: <code class="bg-gray-100 p-1 rounded">acao,nome,telefone,email,cpf,cursoInteresse</code>. A primeira linha deve ser o cabeçalho.</p>
-                            <button id="btn-import-csv" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center">${ICONS.UPLOAD} <span>Importar Arquivo</span></button>
-                            <div id="csv-import-results" class="mt-4 text-sm space-y-2"></div>
+                            <button id="btn-import-file" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center">${ICONS.UPLOAD} <span>Importar Arquivo</span></button>
+                            <div id="file-import-results" class="mt-4 text-sm space-y-2"></div>
                         </div>
                     </div>
                 </div>`;
             document.getElementById('lead-form').addEventListener('submit', handleSaveLead);
-            document.getElementById('btn-import-csv').addEventListener('click', handleCSVImport);
+            document.getElementById('btn-import-file').addEventListener('click', handleFileImport);
         }
         
         function renderInputField(label, name, type, required, placeholder, iconHTML = '') {
@@ -564,63 +563,66 @@
             }
         }
 
-        async function handleCSVImport() {
-            const fileInput = document.getElementById('csv-file-input');
-            const resultsEl = document.getElementById('csv-import-results');
-            const btn = document.getElementById('btn-import-csv');
+        async function handleFileImport() {
+            const fileInput = document.getElementById('file-import-input');
+            const resultsEl = document.getElementById('file-import-results');
+            const btn = document.getElementById('btn-import-file');
             if (!fileInput.files.length) {
-                resultsEl.innerHTML = `<p class="text-red-600 p-3 bg-red-50 rounded-lg">Por favor, selecione um arquivo CSV.</p>`;
+                resultsEl.innerHTML = `<p class="text-red-600 p-3 bg-red-50 rounded-lg">Por favor, selecione um arquivo Excel.</p>`;
                 return;
             }
             btn.disabled = true;
+            btn.innerHTML = 'Processando...';
             resultsEl.innerHTML = '';
 
             const file = fileInput.files[0];
             const reader = new FileReader();
 
             reader.onload = async (event) => {
-                const text = event.target.result;
-                const rows = text.split(/\r?\n/).filter(row => row.trim() !== '');
-                if (rows.length < 2) {
-                    resultsEl.innerHTML = `<p class="text-red-600 p-3 bg-red-50 rounded-lg">Arquivo CSV vazio ou sem dados.</p>`;
-                    btn.disabled = false;
-                    return;
-                }
-
-                const header = rows[0].split(',').map(h => h.trim());
-                const leadsToImport = [];
                 const errors = [];
-                
-                for (let i = 1; i < rows.length; i++) {
-                    const values = rows[i].split(',');
-                    const leadData = header.reduce((obj, key, index) => ({...obj, [key]: values[index] ? values[index].trim() : '' }), {});
+                const leadsToImport = [];
+
+                try {
+                    const data = event.target.result;
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
+                    const jsonLeads = XLSX.utils.sheet_to_json(worksheet);
                     
-                    if (!leadData.acao || !leadData.nome || !leadData.telefone) {
-                        errors.push(`Linha ${i + 1}: Campos obrigatórios (acao, nome, telefone) faltando.`);
-                        continue;
+                    if (jsonLeads.length === 0) {
+                        errors.push("O arquivo Excel parece estar vazio ou sem dados.");
+                    } else {
+                        jsonLeads.forEach((leadData, index) => {
+                            const lineNumber = index + 2; // +1 for header, +1 for 0-index
+                            if (!leadData.acao || !leadData.nome || !leadData.telefone) {
+                                errors.push(`Linha ${lineNumber}: Campos obrigatórios (acao, nome, telefone) faltando.`);
+                                return;
+                            }
+
+                            const cleanedPhone = formatPhone(leadData.telefone);
+                            const cleanedCpf = formatCpf(leadData.cpf);
+
+                            if (leadsData.some(lead => formatPhone(lead.telefone) === cleanedPhone || (cleanedCpf && formatCpf(lead.cpf) === cleanedCpf))) {
+                                errors.push(`Linha ${lineNumber}: Lead com telefone ou CPF já existe no sistema.`);
+                                return;
+                            }
+
+                            leadsToImport.push({
+                                acao: leadData.acao,
+                                nome: leadData.nome,
+                                telefone: cleanedPhone,
+                                email: leadData.email || '',
+                                cpf: cleanedCpf,
+                                cursoInteresse: leadData.cursoInteresse || '',
+                                converted: false,
+                                createdAt: serverTimestamp(),
+                                promotorId: currentUser.uid,
+                                promotorName: currentUser.name
+                            });
+                        });
                     }
 
-                    const cleanedPhone = formatPhone(leadData.telefone);
-                    const cleanedCpf = formatCpf(leadData.cpf);
-
-                    if (leadsData.some(lead => formatPhone(lead.telefone) === cleanedPhone || (cleanedCpf && formatCpf(lead.cpf) === cleanedCpf))) {
-                        errors.push(`Linha ${i + 1}: Lead com telefone ou CPF já existe no sistema.`);
-                        continue;
-                    }
-
-                    leadsToImport.push({
-                        ...leadData,
-                        telefone: cleanedPhone,
-                        cpf: cleanedCpf,
-                        converted: false,
-                        createdAt: serverTimestamp(),
-                        promotorId: currentUser.uid,
-                        promotorName: currentUser.name
-                    });
-                }
-
-                if (leadsToImport.length > 0) {
-                    try {
+                    if (leadsToImport.length > 0) {
                         const batch = writeBatch(db);
                         leadsToImport.forEach(lead => {
                             const newLeadRef = doc(collection(db, LEADS_COLLECTION_PATH));
@@ -628,19 +630,20 @@
                         });
                         await batch.commit();
                         resultsEl.innerHTML += `<div class="p-3 bg-green-50 text-green-700 rounded-lg fade-in">${leadsToImport.length} leads importados com sucesso!</div>`;
-                    } catch (error) {
-                         resultsEl.innerHTML += `<div class="p-3 bg-red-50 text-red-700 rounded-lg fade-in">Erro ao salvar leads: ${error.message}</div>`;
                     }
+                    
+                } catch (error) {
+                    errors.push(`Erro ao processar o arquivo: ${error.message}`);
+                } finally {
+                    if (errors.length > 0) {
+                        resultsEl.innerHTML += `<div class="p-3 bg-yellow-50 text-yellow-700 rounded-lg mt-2 fade-in"><strong>Avisos:</strong><ul>${errors.map(e => `<li class="ml-4 list-disc">${e}</li>`).join('')}</ul></div>`;
+                    }
+                    fileInput.value = '';
+                    btn.disabled = false;
+                    btn.innerHTML = `${ICONS.UPLOAD} <span>Importar Arquivo</span>`;
                 }
-                
-                if (errors.length > 0) {
-                     resultsEl.innerHTML += `<div class="p-3 bg-yellow-50 text-yellow-700 rounded-lg mt-2 fade-in"><strong>Avisos:</strong><ul>${errors.map(e => `<li class="ml-4 list-disc">${e}</li>`).join('')}</ul></div>`;
-                }
-
-                fileInput.value = '';
-                btn.disabled = false;
             };
-            reader.readAsText(file);
+            reader.readAsArrayBuffer(file);
         }
 
         // --- 5. Histórico de Leads ---
@@ -649,7 +652,6 @@
             const uniqueActions = [...new Set(leadsData.map(lead => lead.acao).filter(Boolean))].sort();
             const promotors = [...new Map(usersData.map(user => [user.id, user.name])).values()].filter(Boolean).sort();
 
-
             historyEl.innerHTML = `
                 <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-blue-500 pb-2 mb-4">Acesso e Histórico de Leads</h2>
                 <div class="bg-white p-6 rounded-xl shadow-lg grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 border" id="filter-container">
@@ -657,7 +659,8 @@
                     ${renderFilterDate("Dia", "dia", filterState.dia, ICONS.CALENDAR)}
                     ${renderFilterSelect("Promotor", "promotorId", promotors, filterState.promotorId, ICONS.USER)}
                     ${renderFilterStatus("Status", "converted", filterState.converted, ICONS.CHECK)}
-                    <div class='flex items-end'>
+                    <div class='flex items-end space-x-2'>
+                        <button id="btn-export-excel" class="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg flex items-center justify-center">${ICONS.DOWNLOAD.replace('mr-2', 'mr-1')} <span>Exportar</span></button>
                         <button id="btn-clear-filters" class="w-full bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg">Limpar</button>
                     </div>
                 </div>
@@ -666,6 +669,7 @@
             
             document.getElementById('filter-container').addEventListener('change', (e) => handleFilterChange(e.target.name, e.target.value));
             document.getElementById('btn-clear-filters').addEventListener('click', handleClearFilters);
+            document.getElementById('btn-export-excel').addEventListener('click', handleExportToExcel);
             
             renderLeadsTable();
         }
@@ -687,12 +691,37 @@
             let filtered = [...leadsData];
             if (filterState.acao) filtered = filtered.filter(lead => lead.acao === filterState.acao);
             if (filterState.dia) {
-                const filterDate = new Date(filterState.dia);
-                filtered = filtered.filter(lead => lead.createdAt && lead.createdAt.toDate().toDateString() === filterDate.toDateString());
+                const filterDateStr = new Date(filterState.dia).toDateString();
+                filtered = filtered.filter(lead => lead.createdAt && lead.createdAt.toDate().toDateString() === filterDateStr);
             }
             if (filterState.promotorId) filtered = filtered.filter(lead => lead.promotorName === filterState.promotorId);
             if (filterState.converted !== 'all') filtered = filtered.filter(lead => String(lead.converted) === filterState.converted);
             return filtered.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+        }
+
+        function handleExportToExcel() {
+            const leadsToExport = filterLeads();
+            if (leadsToExport.length === 0) {
+                alert("Nenhum lead para exportar com os filtros atuais.");
+                return;
+            }
+
+            const dataForSheet = leadsToExport.map(lead => ({
+                'Ação': lead.acao,
+                'Nome Completo': lead.nome,
+                'Telefone': lead.telefone,
+                'Email': lead.email || 'N/A',
+                'CPF': lead.cpf || 'N/A',
+                'Curso de Interesse': lead.cursoInteresse || 'N/A',
+                'Convertido': lead.converted ? 'Sim' : 'Não',
+                'Data de Cadastro': formatDate(lead.createdAt),
+                'Promotor': lead.promotorName || 'N/A'
+            }));
+
+            const worksheet = XLSX.utils.json_to_sheet(dataForSheet);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Leads");
+            XLSX.writeFile(workbook, "leads_exportados.xlsx");
         }
         
         function renderLeadsTable() {
