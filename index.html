@@ -165,7 +165,7 @@
         let unsubscribeGap = () => {};
         
         let leadFilterState = { acao: '', dia: '', promotorId: '', converted: 'all', telefone: '', curso: '' };
-        let gapFilterState = { cpf: '', matAcad: 'all', gap: 'all', produto: '', curso: '', metodologia: '', formaIngresso: '' };
+        let gapFilterState = { cpf: '', matAcad: 'all', gap: 'all', produto: '', curso: '', semestre: '', metodologia: '', formaIngresso: '' };
 
         // --- Configuração de Perfis e Permissões ---
         const ROLES = { 
@@ -870,13 +870,19 @@
             gapEl.innerHTML = `
                 <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-purple-500 pb-2 mb-4">GAP Acadêmico</h2>
                 
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-                    <div class="lg:col-span-2">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                    <div>
                         <div id="gap-dashboard-container"></div>
                     </div>
-                    <div>
-                        <h3 class="text-xl font-bold text-gray-800 mb-2">Novo Cadastro</h3>
-                        <div id="gap-registration-container" class="bg-white p-6 rounded-xl shadow-lg border"></div>
+                    <div class="space-y-8">
+                        <div>
+                            <h3 class="text-xl font-bold text-gray-800 mb-2">Novo Cadastro</h3>
+                            <div id="gap-registration-container" class="bg-white p-6 rounded-xl shadow-lg border"></div>
+                        </div>
+                        <div>
+                            <h3 class="text-xl font-bold text-gray-800 mb-2">Importar em Lote (Excel)</h3>
+                            <div id="gap-import-container" class="bg-white p-6 rounded-xl shadow-lg border"></div>
+                        </div>
                     </div>
                 </div>
 
@@ -885,6 +891,7 @@
             `;
             renderGapDashboard();
             renderGapRegistrationForm();
+            renderGapImportForm();
             renderGapFilters();
             renderGapTable();
         }
@@ -893,7 +900,7 @@
             const container = document.getElementById('gap-dashboard-container');
             const stats = calculateGapStats();
             container.innerHTML = `
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     ${renderStatCard("Total em GAP", stats.total, ICONS.ACADEMIC, "bg-purple-500")}
                     ${renderStatCard("Mat. Acadêmica OK", stats.matAcad, ICONS.CHECK, "bg-green-500")}
                     ${renderStatCard("Mat. Financeira OK", stats.matFin, ICONS.HASH, "bg-blue-500")}
@@ -920,6 +927,7 @@
                     ${renderInputField("Nome", "gap-nome", "text", true, "Nome completo do candidato")}
                     ${renderInputField("CPF", "gap-cpf", "text", true, "Apenas números")}
                     ${renderInputField("Curso", "gap-curso", "text", true, "Curso de interesse")}
+                    ${renderInputField("Semestre", "gap-semestre", "text", true, "Ex: 2025.1")}
                     ${renderInputField("Metodologia", "gap-metodologia", "text", false, "EAD, Presencial...")}
                     ${renderInputField("Forma de Ingresso", "gap-formaIngresso", "text", false, "Vestibular, ENEM...")}
                     <button type="submit" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg">Salvar Candidato</button>
@@ -928,22 +936,33 @@
             document.getElementById('gap-form').addEventListener('submit', handleSaveGapEntry);
         }
 
+        function renderGapImportForm() {
+            const container = document.getElementById('gap-import-container');
+            container.innerHTML = `
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Arquivo Excel (.xlsx)</label>
+                        <input type="file" id="gap-file-import-input" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"/>
+                    </div>
+                    <p class="text-xs text-gray-500">Colunas: <code class="bg-gray-100 p-1 rounded">Produto,Nome,CPF,Curso,Semestre,Metodologia,Forma de Ingresso</code>.</p>
+                    <button id="btn-import-gap-file" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center">${ICONS.UPLOAD} <span>Importar Arquivo</span></button>
+                    <div id="gap-file-import-results" class="mt-4 text-sm space-y-2"></div>
+                </div>
+            `;
+            document.getElementById('btn-import-gap-file').addEventListener('click', handleGapFileImport);
+        }
+
         async function handleSaveGapEntry(e) {
             e.preventDefault();
             const form = e.target;
             const msgEl = document.getElementById('gap-message');
-            const cleanedCpf = formatCpf(form['gap-cpf'].value);
-
-            if (gapData.some(g => g.cpf === cleanedCpf)) {
-                showMessage(msgEl, 'Este CPF já está cadastrado no GAP.', true);
-                return;
-            }
-
+            
             const newEntry = {
                 produto: form['gap-produto'].value,
                 nome: form['gap-nome'].value,
-                cpf: cleanedCpf,
+                cpf: formatCpf(form['gap-cpf'].value),
                 curso: form['gap-curso'].value,
+                semestre: form['gap-semestre'].value,
                 metodologia: form['gap-metodologia'].value,
                 formaIngresso: form['gap-formaIngresso'].value,
                 documentos: { rg: false, cpf: false, diploma: false, enem: false, historico: false, planoEnsino: false },
@@ -964,6 +983,86 @@
             }
         }
 
+        async function handleGapFileImport() {
+            const fileInput = document.getElementById('gap-file-import-input');
+            const resultsEl = document.getElementById('gap-file-import-results');
+            const btn = document.getElementById('btn-import-gap-file');
+            if (!fileInput.files.length) {
+                resultsEl.innerHTML = `<p class="text-red-600 p-3 bg-red-50 rounded-lg">Por favor, selecione um arquivo Excel.</p>`;
+                return;
+            }
+            btn.disabled = true;
+            btn.innerHTML = 'Processando...';
+            resultsEl.innerHTML = '';
+
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+
+            reader.onload = async (event) => {
+                const errors = [];
+                const candidatesToImport = [];
+
+                try {
+                    const data = event.target.result;
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
+                    const jsonCandidates = XLSX.utils.sheet_to_json(worksheet);
+                    
+                    if (jsonCandidates.length === 0) {
+                        errors.push("O arquivo Excel parece estar vazio.");
+                    } else {
+                        jsonCandidates.forEach((candidate, index) => {
+                            const lineNumber = index + 2;
+                            const cleanedCpf = formatCpf(candidate.CPF);
+
+                            if (!candidate.Produto || !candidate.Nome || !cleanedCpf || !candidate.Curso || !candidate.Semestre) {
+                                errors.push(`Linha ${lineNumber}: Campos (Produto, Nome, CPF, Curso, Semestre) são obrigatórios.`);
+                                return;
+                            }
+
+                            candidatesToImport.push({
+                                produto: candidate.Produto,
+                                nome: candidate.Nome,
+                                cpf: cleanedCpf,
+                                curso: candidate.Curso,
+                                semestre: candidate.Semestre,
+                                metodologia: candidate.Metodologia || '',
+                                formaIngresso: candidate['Forma de Ingresso'] || '',
+                                documentos: { rg: false, cpf: false, diploma: false, enem: false, historico: false, planoEnsino: false },
+                                matAcad: false,
+                                matFin: false,
+                                observacao: '',
+                                createdAt: serverTimestamp(),
+                                createdBy: currentUser.uid,
+                            });
+                        });
+                    }
+
+                    if (candidatesToImport.length > 0) {
+                        const batch = writeBatch(db);
+                        candidatesToImport.forEach(candidate => {
+                            const newDocRef = doc(collection(db, GAP_COLLECTION_PATH));
+                            batch.set(newDocRef, candidate);
+                        });
+                        await batch.commit();
+                        resultsEl.innerHTML += `<div class="p-3 bg-green-50 text-green-700 rounded-lg fade-in">${candidatesToImport.length} candidatos importados com sucesso!</div>`;
+                    }
+                    
+                } catch (error) {
+                    errors.push(`Erro ao processar o arquivo: ${error.message}`);
+                } finally {
+                    if (errors.length > 0) {
+                        resultsEl.innerHTML += `<div class="p-3 bg-yellow-50 text-yellow-700 rounded-lg mt-2 fade-in"><strong>Avisos:</strong><ul>${errors.map(e => `<li class="ml-4 list-disc">${e}</li>`).join('')}</ul></div>`;
+                    }
+                    fileInput.value = '';
+                    btn.disabled = false;
+                    btn.innerHTML = `${ICONS.UPLOAD} <span>Importar Arquivo</span>`;
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
         function renderGapFilters() {
              const container = document.getElementById('gap-filters-container');
              const unique = (key) => [...new Set(gapData.map(item => item[key]).filter(Boolean))].sort();
@@ -972,6 +1071,7 @@
                     ${renderFilterInput("CPF", "cpf", gapFilterState.cpf, ICONS.HASH, "Buscar por CPF...")}
                     ${renderFilterSelect("Produto", "produto", unique('produto'), gapFilterState.produto, ICONS.ACADEMIC)}
                     ${renderFilterSelect("Curso", "curso", unique('curso'), gapFilterState.curso, ICONS.LIST)}
+                    ${renderFilterSelect("Semestre", "semestre", unique('semestre'), gapFilterState.semestre, ICONS.CALENDAR)}
                     ${renderFilterSelect("Metodologia", "metodologia", unique('metodologia'), gapFilterState.metodologia, ICONS.TAG)}
                     ${renderFilterSelect("Forma Ingresso", "formaIngresso", unique('formaIngresso'), gapFilterState.formaIngresso, ICONS.TAG)}
                     <div>
@@ -991,7 +1091,7 @@
             form.addEventListener('input', e => handleGapFilterChange(e.target.name, e.target.value));
             form.addEventListener('change', e => handleGapFilterChange(e.target.name, e.target.value));
             document.getElementById('btn-clear-gap-filters').addEventListener('click', () => {
-                gapFilterState = { cpf: '', matAcad: 'all', gap: 'all', produto: '', curso: '', metodologia: '', formaIngresso: '' };
+                gapFilterState = { cpf: '', matAcad: 'all', gap: 'all', produto: '', curso: '', semestre: '', metodologia: '', formaIngresso: '' };
                 renderGapView();
             });
         }
@@ -1006,6 +1106,7 @@
                 return (gapFilterState.cpf ? item.cpf.includes(gapFilterState.cpf) : true) &&
                        (gapFilterState.produto ? item.produto === gapFilterState.produto : true) &&
                        (gapFilterState.curso ? item.curso === gapFilterState.curso : true) &&
+                       (gapFilterState.semestre ? item.semestre === gapFilterState.semestre : true) &&
                        (gapFilterState.metodologia ? item.metodologia === gapFilterState.metodologia : true) &&
                        (gapFilterState.formaIngresso ? item.formaIngresso === gapFilterState.formaIngresso : true) &&
                        (gapFilterState.matAcad !== 'all' ? String(item.matAcad) === gapFilterState.matAcad : true) &&
@@ -1041,7 +1142,7 @@
                     
                     tableHTML += `<tr id="gap-row-${entry.id}">
                         <td class="p-4 align-top"><div class="font-bold">${entry.nome}</div><div>${entry.cpf}</div></td>
-                        <td class="p-4 align-top"><div><strong>Produto:</strong> ${entry.produto}</div><div><strong>Curso:</strong> ${entry.curso}</div><div><strong>Ingresso:</strong> ${entry.formaIngresso}</div></td>
+                        <td class="p-4 align-top"><div><strong>Produto:</strong> ${entry.produto}</div><div><strong>Curso:</strong> ${entry.curso}</div><div><strong>Semestre:</strong> ${entry.semestre}</div><div><strong>Ingresso:</strong> ${entry.formaIngresso}</div></td>
                         <td class="p-4 align-top">
                             <div class="flex flex-wrap gap-2">
                                 ${Object.entries(docLabels).map(([key, label]) => `
