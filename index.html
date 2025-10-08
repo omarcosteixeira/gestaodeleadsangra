@@ -4,10 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestão de Leads Angra</title>
-    <!-- Cache Control Tags -->
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
     <!-- Tailwind CSS CDN para estilos responsivos e modernos -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- SheetJS (xlsx) CDN para manipulação de arquivos Excel -->
@@ -138,7 +134,7 @@
             getDoc,
             setDoc,
             writeBatch,
-            where, // Import `where` for queries
+            where,
             setLogLevel 
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
@@ -170,7 +166,7 @@
         let unsubscribeGap = () => {};
         
         let leadFilterState = { acao: '', dia: '', promotorId: '', converted: 'all', telefone: '', curso: '' };
-        let gapFilterState = { cpf: '', matAcad: 'all', gap: 'all', produto: '', curso: '', semestre: '', metodologia: '', formaIngresso: '' };
+        let gapFilterState = { nome: '', cpf: '', matAcad: 'all', gap: 'all', produto: '', curso: '', semestre: '', metodologia: '', formaIngresso: '' };
 
         // --- Configuração de Perfis e Permissões ---
         const ROLES = { 
@@ -435,8 +431,6 @@
         function setupDataListeners() {
             if (!db || !currentUser) return;
             
-            // FIX: Conditionally set up listeners based on user permissions.
-            
             // Listener for Users (everyone needs this)
             const usersQuery = query(collection(db, USERS_COLLECTION_PATH));
             unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
@@ -453,10 +447,8 @@
             // Listener for Leads
             let leadsQuery;
             if (canView('historico')) {
-                // Admins/QG/Sala de Matrícula can see all leads
                 leadsQuery = query(collection(db, LEADS_COLLECTION_PATH));
             } else if(canView('cadastro')) {
-                // Promotors can only see their own leads
                 leadsQuery = query(collection(db, LEADS_COLLECTION_PATH), where("promotorId", "==", currentUser.uid));
             }
 
@@ -951,6 +943,7 @@
                     ${renderSelectField("Produto", "gap-produto", produtos, true)}
                     ${renderInputField("Nome", "gap-nome", "text", true, "Nome completo do candidato")}
                     ${renderInputField("CPF", "gap-cpf", "text", true, "Apenas números")}
+                    ${renderInputField("N° da Oportunidade", "gap-oportunidade", "text", false, "Número gerado")}
                     ${renderInputField("Curso", "gap-curso", "text", true, "Curso de interesse")}
                     ${renderInputField("Semestre", "gap-semestre", "text", true, "Ex: 2025.1")}
                     ${renderInputField("Metodologia", "gap-metodologia", "text", false, "EAD, Presencial...")}
@@ -969,7 +962,7 @@
                         <label class="block text-sm font-medium text-gray-700 mb-1">Arquivo Excel (.xlsx)</label>
                         <input type="file" id="gap-file-import-input" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"/>
                     </div>
-                    <p class="text-xs text-gray-500">Colunas: <code class="bg-gray-100 p-1 rounded">Produto,Nome,CPF,Curso,Semestre,Metodologia,Forma de Ingresso</code>.</p>
+                    <p class="text-xs text-gray-500">Colunas: <code class="bg-gray-100 p-1 rounded">Produto,Nome,CPF,N° da Oportunidade,Curso,Semestre,Metodologia,Forma de Ingresso</code>.</p>
                     <button id="btn-import-gap-file" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center">${ICONS.UPLOAD} <span>Importar Arquivo</span></button>
                     <div id="gap-file-import-results" class="mt-4 text-sm space-y-2"></div>
                 </div>
@@ -986,11 +979,12 @@
                 produto: form['gap-produto'].value,
                 nome: form['gap-nome'].value,
                 cpf: formatCpf(form['gap-cpf'].value),
+                nOportunidade: form['gap-oportunidade'].value || '',
                 curso: form['gap-curso'].value,
                 semestre: form['gap-semestre'].value,
                 metodologia: form['gap-metodologia'].value,
                 formaIngresso: form['gap-formaIngresso'].value,
-                documentos: { rg: false, cpf: false, diploma: false, enem: false, historico: false, planoEnsino: false },
+                documentos: { rg: false, cpf: false, diploma: false, enem: false, historico: false, planoEnsino: false, contrato: false, carta: false },
                 matAcad: false,
                 matFin: false,
                 observacao: '',
@@ -1050,11 +1044,12 @@
                                 produto: candidate.Produto,
                                 nome: candidate.Nome,
                                 cpf: cleanedCpf,
+                                nOportunidade: candidate['N° da Oportunidade'] || '',
                                 curso: candidate.Curso,
                                 semestre: candidate.Semestre,
                                 metodologia: candidate.Metodologia || '',
                                 formaIngresso: candidate['Forma de Ingresso'] || '',
-                                documentos: { rg: false, cpf: false, diploma: false, enem: false, historico: false, planoEnsino: false },
+                                documentos: { rg: false, cpf: false, diploma: false, enem: false, historico: false, planoEnsino: false, contrato: false, carta: false },
                                 matAcad: false,
                                 matFin: false,
                                 observacao: '',
@@ -1093,6 +1088,7 @@
              const unique = (key) => [...new Set(gapData.map(item => item[key]).filter(Boolean))].sort();
              container.innerHTML = `
                 <div class="bg-white p-6 rounded-xl shadow-lg grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 border" id="gap-filter-form">
+                    ${renderFilterInput("Nome", "nome", gapFilterState.nome, ICONS.USER, "Buscar por nome...")}
                     ${renderFilterInput("CPF", "cpf", gapFilterState.cpf, ICONS.HASH, "Buscar por CPF...")}
                     ${renderFilterSelect("Produto", "produto", unique('produto'), gapFilterState.produto, ICONS.ACADEMIC)}
                     ${renderFilterSelect("Curso", "curso", unique('curso'), gapFilterState.curso, ICONS.LIST)}
@@ -1116,7 +1112,7 @@
             form.addEventListener('input', e => handleGapFilterChange(e.target.name, e.target.value));
             form.addEventListener('change', e => handleGapFilterChange(e.target.name, e.target.value));
             document.getElementById('btn-clear-gap-filters').addEventListener('click', () => {
-                gapFilterState = { cpf: '', matAcad: 'all', gap: 'all', produto: '', curso: '', semestre: '', metodologia: '', formaIngresso: '' };
+                gapFilterState = { nome: '', cpf: '', matAcad: 'all', gap: 'all', produto: '', curso: '', semestre: '', metodologia: '', formaIngresso: '' };
                 renderGapView();
             });
         }
@@ -1128,7 +1124,9 @@
 
         function filterGapData() {
             return gapData.filter(item => {
-                return (gapFilterState.cpf ? item.cpf.includes(gapFilterState.cpf) : true) &&
+                const nameMatch = gapFilterState.nome ? item.nome.toLowerCase().includes(gapFilterState.nome.toLowerCase()) : true;
+                return (nameMatch) &&
+                       (gapFilterState.cpf ? item.cpf.includes(gapFilterState.cpf) : true) &&
                        (gapFilterState.produto ? item.produto === gapFilterState.produto : true) &&
                        (gapFilterState.curso ? item.curso === gapFilterState.curso : true) &&
                        (gapFilterState.semestre ? item.semestre === gapFilterState.semestre : true) &&
@@ -1142,7 +1140,7 @@
         function renderGapTable() {
             const container = document.getElementById('gap-table-container');
             const filteredData = filterGapData();
-            const docLabels = { rg: 'RG', cpf: 'CPF', diploma: 'Diploma', enem: 'ENEM', historico: 'Histórico', planoEnsino: 'Plano Ens.' };
+            const docLabels = { rg: 'RG', cpf: 'CPF', diploma: 'Diploma', enem: 'ENEM', historico: 'Histórico', planoEnsino: 'Plano Ens.', contrato: 'Contrato', carta: 'Carta' };
 
             let tableHTML = `<div class="overflow-x-auto bg-white rounded-xl shadow-2xl border">
                 <table class="min-w-full divide-y divide-gray-200 text-sm">
@@ -1166,7 +1164,7 @@
                     const statusText = entry.matAcad ? 'Matrícula Gerada' : 'Aguardando Documentos';
                     
                     tableHTML += `<tr id="gap-row-${entry.id}">
-                        <td class="p-4 align-top"><div class="font-bold">${entry.nome}</div><div>${entry.cpf}</div></td>
+                        <td class="p-4 align-top"><div class="font-bold">${entry.nome}</div><div>${entry.cpf}</div><div><small>Oportunidade: ${entry.nOportunidade || 'N/A'}</small></div></td>
                         <td class="p-4 align-top"><div><strong>Produto:</strong> ${entry.produto}</div><div><strong>Curso:</strong> ${entry.curso}</div><div><strong>Semestre:</strong> ${entry.semestre}</div><div><strong>Ingresso:</strong> ${entry.formaIngresso}</div></td>
                         <td class="p-4 align-top">
                             <div class="flex flex-wrap gap-2">
@@ -1406,5 +1404,4 @@
     </script>
 </body>
 </html>
-
 
