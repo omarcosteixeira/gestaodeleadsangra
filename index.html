@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestão de Leads Angra</title>
+    <!-- Cache Control Tags -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <!-- Tailwind CSS CDN para estilos responsivos e modernos -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- SheetJS (xlsx) CDN para manipulação de arquivos Excel -->
@@ -134,19 +138,20 @@
             getDoc,
             setDoc,
             writeBatch,
+            where, // Import `where` for queries
             setLogLevel 
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Variáveis de Configuração e Globais ---
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'gestaodeleadsangra';
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'gestaodeleadsangra-2cc1d';
         
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-            apiKey: "AIzaSyAY-rGNBHMsT5QqHHvNsZ9VzB3kyHtYPks",
-            authDomain: "gestaodeleadsangra.firebaseapp.com",
-            projectId: "gestaodeleadsangra",
-            storageBucket: "gestaodeleadsangra.firebasestorage.app",
-            messagingSenderId: "706992622509",
-            appId: "1:706992622509:web:b091d4e27920d7d85e2f24"
+            apiKey: "AIzaSyDucVe9OerO1nDpvMaMhWquyxkcco1GTZA",
+            authDomain: "gestaodeleadsangra-2cc1d.firebaseapp.com",
+            projectId: "gestaodeleadsangra-2cc1d",
+            storageBucket: "gestaodeleadsangra-2cc1d.firebasestorage.app",
+            messagingSenderId: "914587846773",
+            appId: "1:914587846773:web:fdd7dc3cc4fcf93529903c"
         };
         
         const LEADS_COLLECTION_PATH = `artifacts/${appId}/public/data/leads`;
@@ -429,12 +434,10 @@
         // --- 2. Listeners de Dados ---
         function setupDataListeners() {
             if (!db || !currentUser) return;
-            const leadsQuery = query(collection(db, LEADS_COLLECTION_PATH));
-            unsubscribeLeads = onSnapshot(leadsQuery, (snapshot) => {
-                leadsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                if (currentView === 'dashboard' || currentView === 'historico') renderView(currentView);
-            }, (error) => console.error("Erro ao ouvir leads:", error));
-
+            
+            // FIX: Conditionally set up listeners based on user permissions.
+            
+            // Listener for Users (everyone needs this)
             const usersQuery = query(collection(db, USERS_COLLECTION_PATH));
             unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
                 usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -446,12 +449,34 @@
                 }
                 if (currentView === 'admin' || currentView === 'historico') renderView(currentView);
             }, (error) => console.error("Erro ao ouvir usuários:", error));
-            
-            const gapQuery = query(collection(db, GAP_COLLECTION_PATH));
-            unsubscribeGap = onSnapshot(gapQuery, (snapshot) => {
-                gapData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                if (currentView === 'gap') renderView('gap');
-            }, (error) => console.error("Erro ao ouvir GAP:", error));
+
+            // Listener for Leads
+            let leadsQuery;
+            if (canView('historico')) {
+                // Admins/QG/Sala de Matrícula can see all leads
+                leadsQuery = query(collection(db, LEADS_COLLECTION_PATH));
+            } else if(canView('cadastro')) {
+                // Promotors can only see their own leads
+                leadsQuery = query(collection(db, LEADS_COLLECTION_PATH), where("promotorId", "==", currentUser.uid));
+            }
+
+            if(leadsQuery) {
+                unsubscribeLeads = onSnapshot(leadsQuery, (snapshot) => {
+                    leadsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    if (currentView === 'dashboard' || currentView === 'historico' || currentView === 'cadastro') {
+                        renderView(currentView);
+                    }
+                }, (error) => console.error("Erro ao ouvir leads:", error));
+            }
+
+            // Listener for GAP Acadêmico
+            if (canView('gap')) {
+                const gapQuery = query(collection(db, GAP_COLLECTION_PATH));
+                unsubscribeGap = onSnapshot(gapQuery, (snapshot) => {
+                    gapData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    if (currentView === 'gap') renderView('gap');
+                }, (error) => console.error("Erro ao ouvir GAP:", error));
+            }
         }
         
         // --- 3. Dashboard ---
@@ -1197,7 +1222,7 @@
             const adminEl = document.getElementById('view-admin');
             adminEl.innerHTML = `
                 <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-blue-500 pb-2 mb-4">Gerenciamento de Usuários</h2>
-                <div class="overflow-x-auto bg-white rounded-xl shadow-2xl border border-gray-100">
+                <div class="overflow-x-auto bg-white rounded-xl shadow-2xl border border-gray-100 mb-8">
                     <table class="min-w-full divide-y divide-gray-200">
                         <thead class="bg-gray-100">
                             <tr>
@@ -1211,13 +1236,41 @@
                             ${usersData.map(user => renderUserRow(user)).join('')}
                         </tbody>
                     </table>
-                </div>`;
+                </div>
+                
+                <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-red-500 pb-2 mb-4">Configurações do Sistema</h2>
+                 <div class="bg-white p-6 md:p-8 rounded-xl shadow-2xl border border-red-200 space-y-4">
+                    <h3 class="text-xl font-bold text-gray-800">Backup e Restauração</h3>
+                    <p class="text-sm text-gray-600">Faça o backup de todos os dados (Leads e GAP Acadêmico) ou restaure a partir de um arquivo de backup.</p>
+                    <div id="backup-message" class="hidden p-3 rounded-lg text-center font-medium"></div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <button id="btn-backup" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center">${ICONS.DOWNLOAD} Fazer Backup Completo</button>
+                        </div>
+                        <div>
+                             <input type="file" id="restore-file-input" accept=".json" class="hidden"/>
+                             <button onclick="document.getElementById('restore-file-input').click()" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center">${ICONS.UPLOAD} Escolher Arquivo de Restore</button>
+                        </div>
+                    </div>
+                    <div id="restore-confirmation" class="hidden mt-4 p-4 bg-red-100 border border-red-300 rounded-lg text-center">
+                        <p class="font-bold text-red-700">ATENÇÃO: A restauração substituirá TODOS os dados atuais de Leads e GAP Acadêmico. Esta ação não pode ser desfeita.</p>
+                        <button id="btn-confirm-restore" class="mt-2 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">Confirmar Restauração</button>
+                    </div>
+                 </div>
+                `;
             
-            adminEl.addEventListener('click', (e) => {
+            document.getElementById('users-table-body').addEventListener('click', (e) => {
                 if (e.target.classList.contains('update-user-btn')) {
                     handleUserUpdate(e.target.dataset.uid);
                 }
             });
+            document.getElementById('btn-backup').addEventListener('click', handleBackup);
+            document.getElementById('restore-file-input').addEventListener('change', (e) => {
+                if(e.target.files.length > 0) {
+                     document.getElementById('restore-confirmation').classList.remove('hidden');
+                }
+            });
+            document.getElementById('btn-confirm-restore').addEventListener('click', handleRestore);
         }
 
         function renderUserRow(user) {
@@ -1261,10 +1314,97 @@
                 setTimeout(() => nameInput.classList.remove('border-red-500', 'ring-red-500'), 2000);
             }
         }
+
+        async function handleBackup() {
+            const msgEl = document.getElementById('backup-message');
+            showMessage(msgEl, 'Gerando backup...', false);
+
+            try {
+                // Fetch all data
+                const leadsSnapshot = await getDocs(query(collection(db, LEADS_COLLECTION_PATH)));
+                const gapSnapshot = await getDocs(query(collection(db, GAP_COLLECTION_PATH)));
+
+                const backupData = {
+                    leads: leadsSnapshot.docs.map(d => ({id: d.id, ...d.data()})),
+                    gap_academico: gapSnapshot.docs.map(d => ({id: d.id, ...d.data()})),
+                    // Users are not backed up to avoid security issues with auth data.
+                };
+
+                // Create and download file
+                const jsonString = JSON.stringify(backupData, null, 2);
+                const blob = new Blob([jsonString], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                const date = new Date().toISOString().slice(0, 10);
+                a.download = `backup_gestao_leads_${date}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                showMessage(msgEl, 'Backup concluído e baixado com sucesso!', false);
+
+            } catch(error) {
+                console.error("Erro no backup:", error);
+                showMessage(msgEl, `Erro ao gerar backup: ${error.message}`, true);
+            }
+        }
+
+        async function handleRestore() {
+            const msgEl = document.getElementById('backup-message');
+            const fileInput = document.getElementById('restore-file-input');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                showMessage(msgEl, 'Nenhum arquivo selecionado para restauração.', true);
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                try {
+                    const backupData = JSON.parse(event.target.result);
+
+                    if (!backupData.leads || !backupData.gap_academico) {
+                        throw new Error("Arquivo de backup inválido ou corrompido.");
+                    }
+                    
+                    showMessage(msgEl, 'Restaurando... Isso pode levar alguns minutos.', false);
+                    
+                    // Restore leads
+                    const leadsBatch = writeBatch(db);
+                    backupData.leads.forEach(leadDoc => {
+                        const docRef = doc(db, LEADS_COLLECTION_PATH, leadDoc.id);
+                        leadsBatch.set(docRef, leadDoc);
+                    });
+                    await leadsBatch.commit();
+
+                    // Restore GAP
+                    const gapBatch = writeBatch(db);
+                    backupData.gap_academico.forEach(gapDoc => {
+                        const docRef = doc(db, GAP_COLLECTION_PATH, gapDoc.id);
+                        gapBatch.set(docRef, gapDoc);
+                    });
+                    await gapBatch.commit();
+                    
+                    showMessage(msgEl, 'Restauração concluída com sucesso!', false);
+
+                } catch (error) {
+                     console.error("Erro na restauração:", error);
+                     showMessage(msgEl, `Erro ao restaurar: ${error.message}`, true);
+                } finally {
+                    fileInput.value = ''; // Reset file input
+                    document.getElementById('restore-confirmation').classList.add('hidden');
+                }
+            };
+            reader.readAsText(file);
+        }
         
         // --- Inicialização ---
         window.addEventListener('load', initApp);
     </script>
 </body>
 </html>
+
 
