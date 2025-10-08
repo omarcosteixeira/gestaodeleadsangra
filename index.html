@@ -943,6 +943,7 @@
                     ${renderSelectField("Produto", "gap-produto", produtos, true)}
                     ${renderInputField("Nome", "gap-nome", "text", true, "Nome completo do candidato")}
                     ${renderInputField("CPF", "gap-cpf", "text", true, "Apenas números")}
+                    ${renderInputField("Telefone", "gap-telefone", "tel", true, "Apenas números com DDD")}
                     ${renderInputField("N° da Oportunidade", "gap-oportunidade", "text", false, "Número gerado")}
                     ${renderInputField("Curso", "gap-curso", "text", true, "Curso de interesse")}
                     ${renderInputField("Semestre", "gap-semestre", "text", true, "Ex: 2025.1")}
@@ -962,7 +963,7 @@
                         <label class="block text-sm font-medium text-gray-700 mb-1">Arquivo Excel (.xlsx)</label>
                         <input type="file" id="gap-file-import-input" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"/>
                     </div>
-                    <p class="text-xs text-gray-500">Colunas: <code class="bg-gray-100 p-1 rounded">Produto,Nome,CPF,N° da Oportunidade,Curso,Semestre,Metodologia,Forma de Ingresso</code>.</p>
+                    <p class="text-xs text-gray-500">Colunas: <code class="bg-gray-100 p-1 rounded">Produto,Nome,CPF,Telefone,N° da Oportunidade,Curso,Semestre,Metodologia,Forma de Ingresso</code>.</p>
                     <button id="btn-import-gap-file" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center">${ICONS.UPLOAD} <span>Importar Arquivo</span></button>
                     <div id="gap-file-import-results" class="mt-4 text-sm space-y-2"></div>
                 </div>
@@ -979,6 +980,7 @@
                 produto: form['gap-produto'].value,
                 nome: form['gap-nome'].value,
                 cpf: formatCpf(form['gap-cpf'].value),
+                telefone: formatPhone(form['gap-telefone'].value),
                 nOportunidade: form['gap-oportunidade'].value || '',
                 curso: form['gap-curso'].value,
                 semestre: form['gap-semestre'].value,
@@ -1035,8 +1037,8 @@
                             const lineNumber = index + 2;
                             const cleanedCpf = formatCpf(candidate.CPF);
 
-                            if (!candidate.Produto || !candidate.Nome || !cleanedCpf || !candidate.Curso || !candidate.Semestre) {
-                                errors.push(`Linha ${lineNumber}: Campos (Produto, Nome, CPF, Curso, Semestre) são obrigatórios.`);
+                            if (!candidate.Produto || !candidate.Nome || !cleanedCpf || !candidate.Curso || !candidate.Semestre || !candidate.Telefone) {
+                                errors.push(`Linha ${lineNumber}: Campos (Produto, Nome, CPF, Curso, Semestre, Telefone) são obrigatórios.`);
                                 return;
                             }
 
@@ -1044,6 +1046,7 @@
                                 produto: candidate.Produto,
                                 nome: candidate.Nome,
                                 cpf: cleanedCpf,
+                                telefone: formatPhone(candidate.Telefone),
                                 nOportunidade: candidate['N° da Oportunidade'] || '',
                                 curso: candidate.Curso,
                                 semestre: candidate.Semestre,
@@ -1152,12 +1155,13 @@
                             <th class="px-4 py-2 text-left font-medium text-gray-500 uppercase">Mat. Acad.</th>
                             <th class="px-4 py-2 text-left font-medium text-gray-500 uppercase">Status</th>
                             <th class="px-4 py-2 text-left font-medium text-gray-500 uppercase">Observação</th>
+                            <th class="px-4 py-2 text-center font-medium text-gray-500 uppercase">Ações</th>
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">`;
 
             if (filteredData.length === 0) {
-                tableHTML += `<tr><td colspan="6" class="p-4 text-center text-gray-500">Nenhum candidato encontrado com os filtros aplicados.</td></tr>`;
+                tableHTML += `<tr><td colspan="7" class="p-4 text-center text-gray-500">Nenhum candidato encontrado com os filtros aplicados.</td></tr>`;
             } else {
                 filteredData.forEach(entry => {
                     const statusClass = entry.matAcad ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800';
@@ -1180,6 +1184,11 @@
                         <td class="p-4 align-top">
                             <textarea class="obs-input w-full border rounded p-1" data-id="${entry.id}" rows="2">${entry.observacao || ''}</textarea>
                         </td>
+                         <td class="p-4 align-top text-center">
+                            <a href="https://wa.me/55${entry.telefone}" target="_blank" class="inline-block text-green-600 hover:text-green-800" title="Chamar no WhatsApp">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="currentColor" viewBox="0 0 16 16"><path d="M13.601 2.326A7.85 7.85 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.9 7.9 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.89 7.89 0 0 0 13.6 2.326zM7.994 14.521a6.57 6.57 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.56 6.56 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592m3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.73.73 0 0 0-.529.247c-.182.198-.691.677-.691 1.654s.71 1.916.81 2.049c.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z"/></svg>
+                            </a>
+                        </td>
                     </tr>`;
                 });
             }
@@ -1187,8 +1196,8 @@
             container.innerHTML = tableHTML;
             
             container.addEventListener('click', (e) => {
-                const target = e.target;
-                if (target.matches('.doc-toggle')) {
+                const target = e.target.closest('.doc-toggle');
+                if (target) {
                     const { id, doc, action } = target.dataset;
                     if (action === 'toggleMatAcad') {
                         const currentStatus = !target.classList.contains('doc-nao');
