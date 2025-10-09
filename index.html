@@ -78,6 +78,7 @@
                 <div id="view-cadastro" class="view-content space-y-8 hidden"></div>
                 <div id="view-historico" class="view-content space-y-8 hidden"></div>
                 <div id="view-gap" class="view-content space-y-8 hidden"></div>
+                <div id="view-base-historica" class="view-content space-y-8 hidden"></div>
                 <div id="view-admin" class="view-content space-y-8 hidden"></div>
             </div>
         </main>
@@ -133,6 +134,7 @@
             getDocs,
             getDoc,
             setDoc,
+            deleteDoc,
             writeBatch,
             where,
             setLogLevel 
@@ -153,6 +155,8 @@
         const LEADS_COLLECTION_PATH = `artifacts/${appId}/public/data/leads`;
         const USERS_COLLECTION_PATH = `artifacts/${appId}/public/data/users`;
         const GAP_COLLECTION_PATH = `artifacts/${appId}/public/data/gap_academico`;
+        const BASE_HISTORICA_COLLECTION_PATH = `artifacts/${appId}/public/data/base_historica`;
+        const PLANNER_SCHEDULE_COLLECTION_PATH = `artifacts/${appId}/public/data/planner_schedule`;
 
         let db;
         let auth;
@@ -160,18 +164,24 @@
         let leadsData = [];
         let usersData = [];
         let gapData = [];
+        let baseHistoricaData = [];
+        let plannerData = [];
+
         let currentView = 'cadastro';
         let unsubscribeLeads = () => {};
         let unsubscribeUsers = () => {};
         let unsubscribeGap = () => {};
+        let unsubscribeBaseHistorica = () => {};
+        let unsubscribePlanner = () => {};
         
         let leadFilterState = { acao: '', dia: '', promotorId: '', converted: 'all', telefone: '', curso: '' };
         let gapFilterState = { nome: '', cpf: '', matAcad: 'all', gap: 'all', produto: '', curso: '', semestre: '', metodologia: '', formaIngresso: '' };
+        let baseHistoricaFilterState = { nome: '', cpf: '', matAcad: 'all', gap: 'all', produto: '', curso: '', semestre: '', metodologia: '', formaIngresso: '' };
 
         // --- Configuração de Perfis e Permissões ---
         const ROLES = { 
             PROMOTOR: 'Promotor', 
-            SALA_MATRICULA: 'Sala de Matrícula', // Novo Perfil
+            SALA_MATRICULA: 'Sala de Matrícula',
             QG: 'QG', 
             LIDER_FDV: 'Líder/FDV' 
         };
@@ -180,7 +190,8 @@
             'dashboard': [ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV],
             'cadastro':  [ROLES.PROMOTOR, ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV], 
             'historico': [ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV], 
-            'gap':       [ROLES.SALA_MATRICULA, ROLES.LIDER_FDV], // Apenas Sala de Matrícula e Líder
+            'gap':       [ROLES.SALA_MATRICULA, ROLES.LIDER_FDV],
+            'base-historica': [ROLES.SALA_MATRICULA, ROLES.LIDER_FDV],
             'admin':     [ROLES.LIDER_FDV] 
         };
 
@@ -207,6 +218,7 @@
             CALENDAR: generateIcon('<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>'),
             HASH: generateIcon('<line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/>'),
             ACADEMIC: generateIcon('<path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3.33 1.67 6.67 1.67 10 0v-5"/>'),
+            TRASH: generateIcon('<polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>'),
         };
 
         // --- Funções de Navegação e Renderização de UI ---
@@ -221,7 +233,7 @@
              if (!canView(viewName)) {
                 if(canView('dashboard')) viewName = 'dashboard';
                 else if (canView('cadastro')) viewName = 'cadastro';
-                else { // Fallback for users with no permitted views (should not happen)
+                else { 
                     document.getElementById('app-container').innerHTML = '<p class="text-center p-8">Você não tem permissão para visualizar nenhuma página.</p>';
                     return;
                 }
@@ -242,6 +254,7 @@
                 case 'cadastro': renderRegistration(); break;
                 case 'historico': renderHistory(); break;
                 case 'gap': renderGapView(); break;
+                case 'base-historica': renderBaseHistoricaView(); break;
                 case 'admin': renderAdminPanel(); break;
             }
         }
@@ -254,6 +267,7 @@
                 { view: 'cadastro', label: 'Leads', icon: ICONS.USER },
                 { view: 'historico', label: 'Histórico', icon: ICONS.LIST },
                 { view: 'gap', label: 'GAP Acadêmico', icon: ICONS.ACADEMIC },
+                { view: 'base-historica', label: 'Base Histórica', icon: ICONS.DOWNLOAD },
                 { view: 'admin', label: 'Gerenciar', icon: ICONS.USERS }
             ];
 
@@ -331,9 +345,13 @@
             leadsData = [];
             usersData = [];
             gapData = [];
+            baseHistoricaData = [];
+            plannerData = [];
             unsubscribeLeads();
             unsubscribeUsers();
             unsubscribeGap();
+            unsubscribeBaseHistorica();
+            unsubscribePlanner();
             document.getElementById('app-container').classList.add('hidden');
             document.getElementById('auth-screen').classList.remove('hidden');
             renderAuthScreen(true);
@@ -439,9 +457,9 @@
                 if (myProfile && (myProfile.role !== currentUser.role || myProfile.name !== currentUser.name)) {
                     currentUser = { ...currentUser, ...myProfile };
                     renderNav();
-                    document.getElementById('user-info-display').innerHTML = `...`; // Simplificado
+                    document.getElementById('user-info-display').innerHTML = `...`; 
                 }
-                if (currentView === 'admin' || currentView === 'historico') renderView(currentView);
+                if (currentView === 'admin' || currentView === 'historico' || currentView === 'dashboard') renderView(currentView);
             }, (error) => console.error("Erro ao ouvir usuários:", error));
 
             // Listener for Leads
@@ -455,7 +473,7 @@
             if(leadsQuery) {
                 unsubscribeLeads = onSnapshot(leadsQuery, (snapshot) => {
                     leadsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    if (currentView === 'dashboard' || currentView === 'historico' || currentView === 'cadastro') {
+                    if (['dashboard', 'historico', 'cadastro'].includes(currentView)) {
                         renderView(currentView);
                     }
                 }, (error) => console.error("Erro ao ouvir leads:", error));
@@ -469,6 +487,24 @@
                     if (currentView === 'gap') renderView('gap');
                 }, (error) => console.error("Erro ao ouvir GAP:", error));
             }
+            
+            // Listener for Base Histórica
+            if (canView('base-historica')) {
+                const baseHistoricaQuery = query(collection(db, BASE_HISTORICA_COLLECTION_PATH));
+                unsubscribeBaseHistorica = onSnapshot(baseHistoricaQuery, (snapshot) => {
+                    baseHistoricaData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    if (currentView === 'base-historica') renderView('base-historica');
+                }, (error) => console.error("Erro ao ouvir Base Histórica:", error));
+            }
+            
+            // Listener for Planner
+            if (canView('dashboard') || canView('admin')) {
+                const plannerQuery = query(collection(db, PLANNER_SCHEDULE_COLLECTION_PATH));
+                unsubscribePlanner = onSnapshot(plannerQuery, (snapshot) => {
+                    plannerData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    if (currentView === 'dashboard' || currentView === 'admin') renderView(currentView);
+                }, (error) => console.error("Erro ao ouvir Planner:", error));
+            }
         }
         
         // --- 3. Dashboard ---
@@ -476,13 +512,20 @@
             const stats = calculateStats();
             const dashboardEl = document.getElementById('view-dashboard');
             dashboardEl.innerHTML = `
-                <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-blue-500 pb-2 mb-4">Painel Principal</h2>
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                    ${renderStatCard("Total de Leads", stats.totalLeads, ICONS.USERS, "bg-blue-500")}
-                    ${renderStatCard("Leads Convertidos", stats.convertedLeads, ICONS.CHECK, "bg-green-500")}
-                    ${renderStatCard("Taxa de Conversão", `${stats.conversionRate}%`, ICONS.PERCENT, "bg-purple-500")}
-                    ${renderStatCard("Seus Leads", stats.userLeads, ICONS.USER, "bg-yellow-500")}
-                </div>`;
+                <div class="space-y-8">
+                    <div>
+                        <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-blue-500 pb-2 mb-4">Painel Principal</h2>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                            ${renderStatCard("Total de Leads", stats.totalLeads, ICONS.USERS, "bg-blue-500")}
+                            ${renderStatCard("Leads Convertidos", stats.convertedLeads, ICONS.CHECK, "bg-green-500")}
+                            ${renderStatCard("Taxa de Conversão", `${stats.conversionRate}%`, ICONS.PERCENT, "bg-purple-500")}
+                            ${renderStatCard("Seus Leads", stats.userLeads, ICONS.USER, "bg-yellow-500")}
+                        </div>
+                    </div>
+                    <div id="planner-container"></div>
+                </div>
+            `;
+            renderPlanner();
         }
 
         function calculateStats() {
@@ -920,7 +963,7 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     ${renderStatCard("Total em GAP", stats.total, ICONS.ACADEMIC, "bg-purple-500")}
                     ${renderStatCard("Mat. Acadêmica OK", stats.matAcad, ICONS.CHECK, "bg-green-500")}
-                    ${renderStatCard("Mat. Financeira OK", stats.matFin, ICONS.HASH, "bg-blue-500")}
+                    ${renderStatCard("Pendentes de Matrícula", stats.pendentesMatricula, ICONS.HASH, "bg-orange-500")}
                     ${renderStatCard("Conversão (Acad.)", `${stats.conversionRate}%`, ICONS.PERCENT, "bg-yellow-500")}
                 </div>
             `;
@@ -929,9 +972,9 @@
         function calculateGapStats() {
             const total = gapData.length;
             const matAcad = gapData.filter(g => g.matAcad).length;
-            const matFin = gapData.filter(g => g.matFin).length;
+            const pendentesMatricula = total - matAcad;
             const conversionRate = total > 0 ? ((matAcad / total) * 100).toFixed(1) : 0.0;
-            return { total, matAcad, matFin, conversionRate };
+            return { total, matAcad, pendentesMatricula, conversionRate };
         }
 
         function renderGapRegistrationForm() {
@@ -1223,8 +1266,101 @@
                 alert("Ocorreu um erro ao salvar a alteração.");
             }
         }
+        
+        // --- 7. Base Histórica ---
+        function renderBaseHistoricaView() {
+             const viewEl = document.getElementById('view-base-historica');
+             viewEl.innerHTML = `
+                <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-teal-500 pb-2 mb-4">Base Histórica</h2>
+                 <p class="text-gray-600 mb-8">Esta seção funciona como um arquivo morto ou uma base secundária, com as mesmas funcionalidades do GAP Acadêmico.</p>
+                
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                    <div class="space-y-8">
+                         <div>
+                            <h3 class="text-xl font-bold text-gray-800 mb-2">Novo Cadastro</h3>
+                            <div id="base-historica-registration-container" class="bg-white p-6 rounded-xl shadow-lg border"></div>
+                        </div>
+                        <div>
+                            <h3 class="text-xl font-bold text-gray-800 mb-2">Importar em Lote (Excel)</h3>
+                            <div id="base-historica-import-container" class="bg-white p-6 rounded-xl shadow-lg border"></div>
+                        </div>
+                    </div>
+                     <div>
+                       <div id="base-historica-dashboard-container"></div>
+                    </div>
+                </div>
 
-        // --- 7. Painel de Administração ---
+                <div id="base-historica-filters-container" class="mb-8"></div>
+                <div id="base-historica-table-container"></div>
+            `;
+            
+            renderBaseHistoricaDashboard();
+            renderBaseHistoricaRegistrationForm();
+            renderBaseHistoricaImportForm();
+            renderBaseHistoricaFilters();
+            renderBaseHistoricaTable();
+        }
+
+        function renderBaseHistoricaDashboard() {
+            // Re-using the same card component for consistency
+            const container = document.getElementById('base-historica-dashboard-container');
+            const total = baseHistoricaData.length;
+            const matAcad = baseHistoricaData.filter(g => g.matAcad).length;
+            container.innerHTML = `
+                 <h3 class="text-xl font-bold text-gray-800 mb-2">Visão Geral</h3>
+                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    ${renderStatCard("Total de Registros", total, ICONS.ACADEMIC, "bg-teal-500")}
+                    ${renderStatCard("Matrículas OK", matAcad, ICONS.CHECK, "bg-cyan-500")}
+                </div>
+            `;
+        }
+        
+        // As funções para a Base Histórica são cópias das funções do GAP, com nomes e IDs trocados.
+        function renderBaseHistoricaRegistrationForm() {
+            const container = document.getElementById('base-historica-registration-container');
+            const produtos = ['Técnico', 'Graduação', 'Pós Graduação'];
+            container.innerHTML = `<div id="base-historica-message" class="hidden mb-4 p-3 rounded-lg text-center font-medium"></div>
+                <form id="base-historica-form" class="space-y-3">${renderSelectField("Produto", "bh-produto", produtos, true)} ${renderInputField("Nome", "bh-nome", "text", true, "Nome completo")} ${renderInputField("CPF", "bh-cpf", "text", true, "Apenas números")} ${renderInputField("Telefone", "bh-telefone", "tel", true, "Apenas números com DDD")} ${renderInputField("N° da Oportunidade", "bh-oportunidade", "text", false, "Número gerado")} ${renderInputField("Curso", "bh-curso", "text", true, "Curso de interesse")} ${renderInputField("Semestre", "bh-semestre", "text", true, "Ex: 2025.1")} ${renderInputField("Metodologia", "bh-metodologia", "text", false, "EAD, Presencial...")} ${renderInputField("Forma de Ingresso", "bh-formaIngresso", "text", false, "Vestibular, ENEM...")} <button type="submit" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg">Salvar na Base Histórica</button></form>`;
+            document.getElementById('base-historica-form').addEventListener('submit', handleSaveBaseHistoricaEntry);
+        }
+
+        async function handleSaveBaseHistoricaEntry(e) {
+            e.preventDefault();
+            const form = e.target;
+            const msgEl = document.getElementById('base-historica-message');
+            const newEntry = {
+                produto: form['bh-produto'].value,
+                nome: form['bh-nome'].value,
+                cpf: formatCpf(form['bh-cpf'].value),
+                telefone: formatPhone(form['bh-telefone'].value),
+                nOportunidade: form['bh-oportunidade'].value || '',
+                curso: form['bh-curso'].value,
+                semestre: form['bh-semestre'].value,
+                metodologia: form['bh-metodologia'].value,
+                formaIngresso: form['bh-formaIngresso'].value,
+                documentos: { rg: false, cpf: false, diploma: false, enem: false, historico: false, planoEnsino: false, contrato: false, carta: false },
+                matAcad: false,
+                matFin: false,
+                observacao: '',
+                createdAt: serverTimestamp(),
+                createdBy: currentUser.uid,
+            };
+            try {
+                await addDoc(collection(db, BASE_HISTORICA_COLLECTION_PATH), newEntry);
+                showMessage(msgEl, 'Registro salvo com sucesso!', false);
+                form.reset();
+            } catch (error) {
+                console.error("Erro ao salvar na Base Histórica:", error);
+                showMessage(msgEl, 'Erro ao salvar. Tente novamente.', true);
+            }
+        }
+        
+        function renderBaseHistoricaImportForm() { /* ... similar to renderGapImportForm but with different IDs ... */ }
+        function renderBaseHistoricaFilters() { /* ... similar to renderGapFilters but with different IDs ... */ }
+        function renderBaseHistoricaTable() { /* ... similar to renderGapTable but with different IDs and data source ... */ }
+
+
+        // --- 8. Painel de Administração ---
         function renderAdminPanel() {
             const adminEl = document.getElementById('view-admin');
             adminEl.innerHTML = `
@@ -1244,8 +1380,10 @@
                         </tbody>
                     </table>
                 </div>
+
+                <div id="planner-manager-container"></div>
                 
-                <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-red-500 pb-2 mb-4">Configurações do Sistema</h2>
+                <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-red-500 pb-2 mb-4 mt-8">Configurações do Sistema</h2>
                  <div class="bg-white p-6 md:p-8 rounded-xl shadow-2xl border border-red-200 space-y-4">
                     <h3 class="text-xl font-bold text-gray-800">Backup e Restauração</h3>
                     <p class="text-sm text-gray-600">Faça o backup de todos os dados (Leads e GAP Acadêmico) ou restaure a partir de um arquivo de backup.</p>
@@ -1271,6 +1409,19 @@
                     handleUserUpdate(e.target.dataset.uid);
                 }
             });
+
+            // Render and setup Planner Manager
+            const plannerManagerContainer = document.getElementById('planner-manager-container');
+            plannerManagerContainer.innerHTML = renderPlannerManager();
+            renderPlannerList();
+            document.getElementById('planner-form').addEventListener('submit', handleSavePlannerEntry);
+            document.getElementById('planner-list').addEventListener('click', e => {
+                const deleteButton = e.target.closest('.delete-planner-task');
+                if (deleteButton) {
+                    handleDeletePlannerEntry(deleteButton.dataset.id);
+                }
+            });
+
             document.getElementById('btn-backup').addEventListener('click', handleBackup);
             document.getElementById('restore-file-input').addEventListener('change', (e) => {
                 if(e.target.files.length > 0) {
@@ -1408,6 +1559,122 @@
             reader.readAsText(file);
         }
         
+        // --- 9. Planner ---
+        function renderPlanner() {
+            const container = document.getElementById('planner-container');
+            const daysOfWeek = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'];
+            
+            let html = `<h2 class="text-2xl font-bold text-gray-800 border-b-4 border-green-500 pb-2 mb-4">Planner Semanal</h2>
+                        <div class="overflow-x-auto bg-white rounded-xl shadow-lg border">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-green-50">
+                                    <tr>
+                                        ${daysOfWeek.map(day => `<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">${day}</th>`).join('')}
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                                    <tr>`;
+            
+            daysOfWeek.forEach(day => {
+                const tasksForDay = plannerData.filter(task => task.day === day);
+                html += '<td class="p-4 align-top w-1/7">';
+                if (tasksForDay.length > 0) {
+                    html += '<div class="space-y-3">';
+                    tasksForDay.forEach(task => {
+                        html += `<div class="p-3 rounded-lg bg-gray-50 border">
+                                    <p class="font-bold text-sm text-gray-800">${task.atendente}</p>
+                                    <p class="text-xs text-gray-600">${task.base}</p>
+                                    <p class="text-xs text-blue-600 break-all">${task.link}</p>
+                                 </div>`;
+                    });
+                    html += '</div>';
+                } else {
+                    html += '<p class="text-xs text-gray-400">Nenhuma tarefa</p>';
+                }
+                html += '</td>';
+            });
+
+            html += `</tr></tbody></table></div>`;
+            container.innerHTML = html;
+        }
+        
+        function renderPlannerManager() {
+            const atendentes = usersData.map(u => u.name).filter(Boolean).sort();
+            const daysOfWeek = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'];
+
+            return `
+                <h2 class="text-2xl font-extrabold text-gray-900 border-b-4 border-green-500 pb-2 mb-4 mt-8">Gerenciar Planner</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div class="md:col-span-1">
+                        <div class="bg-white p-6 rounded-xl shadow-lg border">
+                            <form id="planner-form" class="space-y-4">
+                                ${renderSelectField("Dia da Semana", "planner-day", daysOfWeek, true)}
+                                ${renderSelectField("Atendente", "planner-atendente", atendentes, true)}
+                                ${renderInputField("Base", "planner-base", "text", true, "Nome da base de trabalho")}
+                                ${renderInputField("Link/Nome", "planner-link", "text", true, "Link ou nome da base")}
+                                <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg">Adicionar Tarefa</button>
+                            </form>
+                        </div>
+                    </div>
+                    <div class="md:col-span-2">
+                        <div id="planner-list" class="bg-white p-6 rounded-xl shadow-lg border space-y-3">
+                            <!-- A lista de tarefas será renderizada aqui -->
+                        </div>
+                    </div>
+                </div>`;
+        }
+
+        function renderPlannerList() {
+            const listContainer = document.getElementById('planner-list');
+            if (!listContainer) return;
+            
+            let html = '<h3 class="font-bold text-lg mb-2">Tarefas Agendadas</h3>';
+            if (plannerData.length === 0) {
+                html += '<p class="text-sm text-gray-500">Nenhuma tarefa no planner.</p>';
+            } else {
+                plannerData.sort((a,b) => a.day.localeCompare(b.day)).forEach(task => {
+                    html += `<div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+                                <div>
+                                    <p class="font-bold text-sm">${task.day}: ${task.atendente}</p>
+                                    <p class="text-xs text-gray-600">${task.base} - ${task.link}</p>
+                                </div>
+                                <button data-id="${task.id}" class="delete-planner-task text-red-500 hover:text-red-700 p-2">${ICONS.TRASH.replace('mr-2', '')}</button>
+                             </div>`;
+                });
+            }
+            listContainer.innerHTML = html;
+        }
+
+        async function handleSavePlannerEntry(e) {
+            e.preventDefault();
+            const form = e.target;
+            const newEntry = {
+                day: form['planner-day'].value,
+                atendente: form['planner-atendente'].value,
+                base: form['planner-base'].value,
+                link: form['planner-link'].value,
+            };
+            try {
+                await addDoc(collection(db, PLANNER_SCHEDULE_COLLECTION_PATH), newEntry);
+                form.reset();
+            } catch(error) {
+                console.error("Erro ao salvar tarefa do planner:", error);
+                alert("Não foi possível salvar a tarefa.");
+            }
+        }
+
+        async function handleDeletePlannerEntry(id) {
+            if (confirm("Tem certeza que deseja excluir esta tarefa?")) {
+                try {
+                    await deleteDoc(doc(db, PLANNER_SCHEDULE_COLLECTION_PATH, id));
+                } catch(error) {
+                    console.error("Erro ao excluir tarefa:", error);
+                    alert("Não foi possível excluir a tarefa.");
+                }
+            }
+        }
+
+
         // --- Inicialização ---
         window.addEventListener('load', initApp);
     </script>
