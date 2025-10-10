@@ -11,7 +11,7 @@
     <!-- Google Fonts: Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://css.gg/css?=|check|close|user|upload|search|tag|phone|mail|list|calendar|hash|briefcase" rel="stylesheet">
+    <link href="https://css.gg/css?=|check|close|user|upload|search|tag|phone|mail|list|calendar|hash|briefcase|bookmark" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         /* Estilos globais para a fonte e transições */
@@ -77,6 +77,7 @@
                 <div id="view-dashboard" class="view-content space-y-8 hidden"></div>
                 <div id="view-cadastro" class="view-content space-y-8 hidden"></div>
                 <div id="view-historico" class="view-content space-y-8 hidden"></div>
+                <div id="view-bases" class="view-content space-y-8 hidden"></div>
                 <div id="view-gap" class="view-content space-y-8 hidden"></div>
                 <div id="view-admin" class="view-content space-y-8 hidden"></div>
             </div>
@@ -157,13 +158,11 @@
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Variáveis de Configuração e Globais ---
-        // CORREÇÃO: Reintroduzido o fallback com as credenciais para contornar problemas no ambiente de produção.
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'gestaodeleadsangra-2cc1d';
         
         const firebaseConfig = typeof __firebase_config !== 'undefined' && __firebase_config !== "{}"
             ? JSON.parse(__firebase_config) 
             : {
-                // ATENÇÃO: As credenciais abaixo são um fallback. O ideal é que sejam fornecidas pelo ambiente.
                 apiKey: "AIzaSyDucVe9OerO1nDpvMaMhWquyxkcco1GTZA",
                 authDomain: "gestaodeleadsangra-2cc1d.firebaseapp.com",
                 projectId: "gestaodeleadsangra-2cc1d",
@@ -176,6 +175,7 @@
         const USERS_COLLECTION_PATH = `artifacts/${appId}/public/data/users`;
         const GAP_COLLECTION_PATH = `artifacts/${appId}/public/data/gap_academico`;
         const PLANNER_COLLECTION_PATH = `artifacts/${appId}/public/data/planner`;
+        const BASES_COLLECTION_PATH = `artifacts/${appId}/public/data/bases`;
 
         let db;
         let auth;
@@ -184,15 +184,18 @@
         let usersData = [];
         let gapData = [];
         let plannerData = [];
+        let basesData = [];
         let currentView = 'cadastro';
         let isAuthReady = false;
         let unsubscribeLeads = () => {};
         let unsubscribeUsers = () => {};
         let unsubscribeGap = () => {};
         let unsubscribePlanner = () => {};
+        let unsubscribeBases = () => {};
         
         let leadFilterState = { acao: '', dia: '', promotorId: '', converted: 'all', telefone: '', curso: '' };
         let gapFilterState = { nome: '', cpf: '', matAcad: 'all', gap: 'all', produto: '', curso: '', semestre: '', metodologia: '', formaIngresso: '' };
+        let baseFilterState = { nome: '', cpf: '', produto: '', curso: '', semestre: '', metodologia: '', formaIngresso: '', status: 'all' };
 
         // --- Configuração de Perfis e Permissões ---
         const ROLES = { 
@@ -206,6 +209,7 @@
             'dashboard': [ROLES.PROMOTOR, ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV],
             'cadastro':  [ROLES.PROMOTOR, ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV], 
             'historico': [ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV], 
+            'bases':     [ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV],
             'gap':       [ROLES.SALA_MATRICULA, ROLES.LIDER_FDV],
             'admin':     [ROLES.LIDER_FDV] 
         };
@@ -233,6 +237,8 @@
             CALENDAR: generateIcon('<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>'),
             HASH: generateIcon('<line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/>'),
             ACADEMIC: generateIcon('<path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3.33 1.67 6.67 1.67 10 0v-5"/>'),
+            DATABASE: generateIcon('<ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>'),
+            BOOKMARK: generateIcon('<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>'),
         };
         
         // --- UI Helpers ---
@@ -305,6 +311,7 @@
                 case 'dashboard': renderDashboard(); break;
                 case 'cadastro': renderRegistration(); break;
                 case 'historico': renderHistory(); break;
+                case 'bases': renderBasesView(); break;
                 case 'gap': renderGapView(); break;
                 case 'admin': renderAdminPanel(); break;
             }
@@ -317,7 +324,8 @@
                 { view: 'dashboard', label: 'Painel', icon: ICONS.CHECK },
                 { view: 'cadastro', label: 'Leads', icon: ICONS.USER },
                 { view: 'historico', label: 'Histórico', icon: ICONS.LIST },
-                { view: 'gap', label: 'GAP Acadêmico', icon: ICONS.ACADEMIC },
+                { view: 'bases', label: 'Bases', icon: ICONS.DATABASE },
+                { view: 'gap', label: 'GAP', icon: ICONS.ACADEMIC },
                 { view: 'admin', label: 'Gerenciar', icon: ICONS.USERS }
             ];
 
@@ -415,6 +423,7 @@
             unsubscribeUsers();
             unsubscribeGap();
             unsubscribePlanner();
+            unsubscribeBases();
             document.getElementById('app-container').classList.add('hidden');
             document.getElementById('auth-screen').classList.remove('hidden');
             renderAuthScreen(true);
@@ -546,6 +555,14 @@
                     }
                 }, (error) => console.error("Erro ao ouvir leads:", error));
             }
+            
+            if (canView('bases')) {
+                const basesQuery = query(collection(db, BASES_COLLECTION_PATH));
+                unsubscribeBases = onSnapshot(basesQuery, (snapshot) => {
+                    basesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    if (currentView === 'bases') renderView('bases');
+                }, (error) => console.error("Erro ao ouvir bases:", error));
+            }
 
             if (canView('gap')) {
                 const gapQuery = query(collection(db, GAP_COLLECTION_PATH));
@@ -566,8 +583,6 @@
             }
         }
         
-        // O resto do código permanece o mesmo...
-
         // --- 3. Dashboard ---
         function renderDashboard() {
             const stats = calculateStats();
@@ -581,8 +596,8 @@
                     ${renderStatCard("Seus Leads", stats.userLeads, ICONS.USER, "bg-yellow-500")}
                 </div>
                 <div class="mt-12">
-                    <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-green-500 pb-2 mb-4">Planner Semanal</h2>
-                    <div id="planner-container" class="space-y-6">
+                    <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-green-500 pb-2 mb-4">Planner da Semana</h2>
+                    <div id="planner-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                         ${renderPlannerView()}
                     </div>
                 </div>
@@ -615,7 +630,7 @@
         function renderPlannerView() {
             const daysOfWeek = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"];
             if (plannerData.length === 0) {
-                return '<div class="bg-white p-6 rounded-xl shadow-lg border text-center text-gray-500">Nenhuma tarefa agendada para esta semana.</div>';
+                return '<div class="col-span-full bg-white p-6 rounded-xl shadow-lg border text-center text-gray-500">Nenhuma tarefa agendada para esta semana.</div>';
             }
 
             let html = '';
@@ -623,24 +638,24 @@
                 const tasksForDay = plannerData.filter(task => task.dayOfWeek === day);
                 if (tasksForDay.length > 0) {
                     html += `
-                        <div class="bg-white p-6 rounded-xl shadow-lg border">
+                        <div class="bg-white p-6 rounded-xl shadow-lg border-t-4 border-green-500 flex flex-col">
                             <h3 class="text-xl font-bold text-gray-800 mb-4">${day}</h3>
-                            <div class="divide-y divide-gray-200">
+                            <div class="space-y-4 flex-grow">
                     `;
                     tasksForDay.forEach(task => {
                         const baseDisplay = task.baseLink 
-                            ? `<a href="${task.baseLink}" target="_blank" class="text-blue-600 hover:underline">${task.baseName}</a>`
-                            : task.baseName;
+                            ? `<a href="${task.baseLink}" target="_blank" class="text-blue-600 hover:underline font-semibold">${task.baseName}</a>`
+                            : `<span class="font-semibold">${task.baseName}</span>`;
 
                         html += `
-                            <div class="py-3 flex flex-col sm:flex-row justify-between items-start sm:items-center">
-                                <div class="flex items-center mb-2 sm:mb-0">
+                            <div class="p-3 bg-gray-50 rounded-lg">
+                                <div class="flex items-center mb-2">
                                     ${ICONS.USER.replace('h-5 w-5', 'h-4 w-4').replace('mr-2 inline-block', 'mr-2 text-blue-500')}
                                     <span class="font-semibold text-gray-700">${task.atendenteName}</span>
                                 </div>
-                                <div class="flex items-center text-gray-600">
-                                     ${ICONS.LIST.replace('h-5 w-5', 'h-4 w-4').replace('mr-2 inline-block', 'mr-2 text-green-500')}
-                                     <span><strong>Base:</strong> ${baseDisplay}</span>
+                                <div class="flex items-start text-gray-600">
+                                     ${ICONS.LIST.replace('h-5 w-5', 'h-4 w-4').replace('mr-2 inline-block', 'mr-2 text-green-500 mt-1')}
+                                     <span>Trabalhar Base: ${baseDisplay}</span>
                                 </div>
                             </div>
                         `;
@@ -649,7 +664,7 @@
                 }
             });
 
-            return html || '<div class="bg-white p-6 rounded-xl shadow-lg border text-center text-gray-500">Nenhuma tarefa agendada.</div>';
+            return html || '<div class="col-span-full bg-white p-6 rounded-xl shadow-lg border text-center text-gray-500">Nenhuma tarefa agendada.</div>';
         }
 
         function showMessage(el, message, isError) {
@@ -1009,7 +1024,304 @@
             }
         }
         
-        // --- 6. GAP Acadêmico ---
+        // --- 6. Bases a Trabalhar ---
+        function renderBasesView() {
+            const basesEl = document.getElementById('view-bases');
+            basesEl.innerHTML = `
+                <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-yellow-500 pb-2 mb-8">Bases a Trabalhar</h2>
+                
+                <div id="bases-dashboard-container" class="mb-8"></div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+                    <div class="lg:col-span-1">
+                        <h3 class="text-xl font-bold text-gray-800 mb-2">Novo Cadastro</h3>
+                        <div id="bases-registration-container" class="bg-white p-6 rounded-xl shadow-lg border"></div>
+                    </div>
+                    <div class="lg:col-span-2">
+                        <h3 class="text-xl font-bold text-gray-800 mb-2">Importar / Exportar</h3>
+                        <div id="bases-import-export-container" class="bg-white p-6 rounded-xl shadow-lg border"></div>
+                    </div>
+                </div>
+
+                <div id="bases-filters-container" class="mb-8"></div>
+                <div id="bases-table-container"></div>
+            `;
+
+            renderBasesDashboard();
+            renderBasesRegistrationForm();
+            renderBasesImportExport();
+            renderBasesFilters();
+            renderBasesTable();
+        }
+
+        function renderBasesDashboard() {
+            const container = document.getElementById('bases-dashboard-container');
+            const stats = calculateBasesStats();
+            container.innerHTML = `
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    ${renderStatCard("Total na Base", stats.total, ICONS.DATABASE, "bg-yellow-500")}
+                    ${renderStatCard("Convertidos", stats.converted, ICONS.CHECK, "bg-green-500")}
+                    ${renderStatCard("Não Convertidos", stats.pending, ICONS.BOOKMARK, "bg-blue-500")}
+                </div>
+            `;
+        }
+
+        function calculateBasesStats() {
+            const total = basesData.length;
+            const converted = basesData.filter(b => b.status === 'Convertido').length;
+            const pending = total - converted;
+            return { total, converted, pending };
+        }
+
+        function renderBasesRegistrationForm() {
+            const container = document.getElementById('bases-registration-container');
+            const produtos = ['Técnico', 'Graduação', 'Pós Graduação'];
+            container.innerHTML = `
+                <div id="base-message" class="hidden mb-4 p-3 rounded-lg text-center font-medium"></div>
+                <form id="base-form" class="space-y-3">
+                    ${renderSelectField("Produto", "base-produto", produtos, true, ICONS.BOOKMARK)}
+                    ${renderInputField("Nome", "base-nome", "text", true, "Nome completo", ICONS.USER)}
+                    ${renderInputField("CPF", "base-cpf", "text", false, "Apenas números", ICONS.HASH)}
+                    ${renderInputField("Telefone", "base-telefone", "tel", true, "DDD + número", ICONS.PHONE)}
+                    ${renderInputField("N° da Oportunidade", "base-oportunidade", "text", false, "", ICONS.TAG)}
+                    ${renderInputField("Curso", "base-curso", "text", true, "", ICONS.ACADEMIC)}
+                    ${renderInputField("Semestre", "base-semestre", "text", true, "Ex: 2025.1", ICONS.CALENDAR)}
+                    ${renderInputField("Metodologia", "base-metodologia", "text", false, "EAD, Presencial...")}
+                    ${renderInputField("Forma de Ingresso", "base-formaIngresso", "text", false, "Vestibular, ENEM...")}
+                    <button type="submit" class="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-3 px-4 rounded-lg">Salvar na Base</button>
+                </form>
+            `;
+            document.getElementById('base-form').addEventListener('submit', handleSaveBaseEntry);
+        }
+
+        async function handleSaveBaseEntry(e) {
+            e.preventDefault();
+            const form = e.target;
+            const msgEl = document.getElementById('base-message');
+            
+            const newEntry = {
+                produto: form['base-produto'].value,
+                nome: form['base-nome'].value,
+                cpf: formatCpf(form['base-cpf'].value),
+                telefone: formatPhone(form['base-telefone'].value),
+                nOportunidade: form['base-oportunidade'].value || '',
+                curso: form['base-curso'].value,
+                semestre: form['base-semestre'].value,
+                metodologia: form['base-metodologia'].value,
+                formaIngresso: form['base-formaIngresso'].value,
+                status: 'Pendente',
+                createdAt: serverTimestamp(),
+                createdBy: currentUser.uid,
+            };
+            
+            if(!newEntry.produto || !newEntry.nome || !newEntry.telefone || !newEntry.curso || !newEntry.semestre) {
+                showMessage(msgEl, 'Preencha os campos obrigatórios.', true);
+                return;
+            }
+
+            try {
+                await addDoc(collection(db, BASES_COLLECTION_PATH), newEntry);
+                showMessage(msgEl, 'Candidato salvo com sucesso!', false);
+                form.reset();
+            } catch (error) {
+                console.error("Erro ao salvar na Base:", error);
+                showMessage(msgEl, 'Erro ao salvar. Tente novamente.', true);
+            }
+        }
+
+        function renderBasesImportExport() {
+            const container = document.getElementById('bases-import-export-container');
+            container.innerHTML = `
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Importar de Arquivo Excel (.xlsx)</label>
+                        <input type="file" id="bases-file-import-input" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-yellow-50 file:text-yellow-700 hover:file:bg-yellow-100"/>
+                        <p class="text-xs text-gray-500 mt-1">Colunas: <code class="bg-gray-100 p-1 rounded">Produto,Nome,CPF,Telefone,N_Oportunidade,Curso,Semestre,Metodologia,Forma_Ingresso</code>.</p>
+                    </div>
+                    <button id="btn-import-bases-file" class="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center">${ICONS.UPLOAD} <span>Importar Arquivo</span></button>
+                    <div id="bases-file-import-results" class="mt-4 text-sm space-y-2"></div>
+                </div>
+                <div class="border-t my-6"></div>
+                <div class="space-y-4">
+                    <label class="block text-sm font-medium text-gray-700">Exportar Dados Filtrados para Excel</label>
+                    <button id="btn-export-bases-excel" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center">${ICONS.DOWNLOAD} <span>Exportar para Excel</span></button>
+                </div>
+            `;
+            document.getElementById('btn-import-bases-file').addEventListener('click', handleBasesFileImport);
+            document.getElementById('btn-export-bases-excel').addEventListener('click', handleExportBasesToExcel);
+        }
+        
+        async function handleBasesFileImport() {
+             const fileInput = document.getElementById('bases-file-import-input');
+             const resultsEl = document.getElementById('bases-file-import-results');
+             resultsEl.innerHTML = '';
+             if (!fileInput.files.length) {
+                 resultsEl.innerHTML = `<p class="text-red-600">Por favor, selecione um arquivo.</p>`;
+                 return;
+             }
+             const file = fileInput.files[0];
+             const reader = new FileReader();
+             reader.onload = async (event) => {
+                 const errors = [];
+                 const entriesToImport = [];
+                 try {
+                     const data = event.target.result;
+                     const workbook = XLSX.read(data, { type: 'array' });
+                     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                     const json = XLSX.utils.sheet_to_json(worksheet);
+
+                     json.forEach((row, index) => {
+                         const entry = {
+                             produto: row.Produto, nome: row.Nome, cpf: formatCpf(row.CPF), telefone: formatPhone(row.Telefone),
+                             nOportunidade: row.N_Oportunidade || '', curso: row.Curso, semestre: row.Semestre,
+                             metodologia: row.Metodologia || '', formaIngresso: row.Forma_Ingresso || '',
+                             status: 'Pendente', createdAt: serverTimestamp(), createdBy: currentUser.uid,
+                         };
+                         if (!entry.produto || !entry.nome || !entry.telefone) {
+                             errors.push(`Linha ${index + 2}: Campos obrigatórios faltando.`);
+                         } else {
+                             entriesToImport.push(entry);
+                         }
+                     });
+
+                     if (entriesToImport.length > 0) {
+                         const batch = writeBatch(db);
+                         entriesToImport.forEach(item => {
+                             const docRef = doc(collection(db, BASES_COLLECTION_PATH));
+                             batch.set(docRef, item);
+                         });
+                         await batch.commit();
+                         resultsEl.innerHTML = `<p class="text-green-600">${entriesToImport.length} registros importados com sucesso!</p>`;
+                     }
+                     if(errors.length > 0) {
+                         resultsEl.innerHTML += `<p class="text-yellow-600 mt-2"><strong>Avisos:</strong><br>${errors.join('<br>')}</p>`;
+                     }
+                 } catch (e) {
+                     resultsEl.innerHTML = `<p class="text-red-600">Erro ao ler o arquivo: ${e.message}</p>`;
+                 } finally {
+                    fileInput.value = '';
+                 }
+             };
+             reader.readAsArrayBuffer(file);
+        }
+
+        function handleExportBasesToExcel() {
+            const dataToExport = filterBasesData();
+            if(dataToExport.length === 0) {
+                showToast("Nenhum dado para exportar com os filtros atuais.", true);
+                return;
+            }
+            const sheetData = dataToExport.map(item => ({
+                Produto: item.produto, Nome: item.nome, CPF: item.cpf, Telefone: item.telefone,
+                "N° Oportunidade": item.nOportunidade, Curso: item.curso, Semestre: item.semestre,
+                Metodologia: item.metodologia, "Forma de Ingresso": item.formaIngresso, Status: item.status
+            }));
+            const worksheet = XLSX.utils.json_to_sheet(sheetData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Bases");
+            XLSX.writeFile(workbook, "bases_exportadas.xlsx");
+        }
+
+        function renderBasesFilters() {
+            const container = document.getElementById('bases-filters-container');
+            const unique = (key) => [...new Set(basesData.map(item => item[key]).filter(Boolean))].sort();
+            container.innerHTML = `
+                <div class="bg-white p-6 rounded-xl shadow-lg grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 border" id="base-filter-form">
+                    ${renderFilterInput("Nome", "nome", baseFilterState.nome, ICONS.USER, "Buscar...")}
+                    ${renderFilterInput("CPF", "cpf", baseFilterState.cpf, ICONS.HASH, "Buscar...")}
+                    ${renderFilterSelect("Produto", "produto", unique('produto'), baseFilterState.produto, ICONS.BOOKMARK)}
+                    ${renderFilterSelect("Curso", "curso", unique('curso'), baseFilterState.curso, ICONS.ACADEMIC)}
+                    ${renderFilterSelect("Status", "status", ["Pendente", "Convertido", "Interessado", "Não Interessado"], baseFilterState.status, ICONS.CHECK)}
+                    <div class='flex items-end'><button id="btn-clear-base-filters" class="w-full bg-red-500 text-white font-medium py-2 px-4 rounded-lg">Limpar</button></div>
+                </div>`;
+            
+            const form = document.getElementById('base-filter-form');
+            form.addEventListener('input', e => handleBaseFilterChange(e.target.name, e.target.value));
+            form.addEventListener('change', e => handleBaseFilterChange(e.target.name, e.target.value));
+            document.getElementById('btn-clear-base-filters').addEventListener('click', () => {
+                baseFilterState = { nome: '', cpf: '', produto: '', curso: '', status: 'all' };
+                renderBasesView();
+            });
+        }
+        
+        function handleBaseFilterChange(name, value) {
+            baseFilterState[name] = value;
+            renderBasesTable();
+        }
+
+        function filterBasesData() {
+            return basesData.filter(item => {
+                const nameMatch = baseFilterState.nome ? item.nome.toLowerCase().includes(baseFilterState.nome.toLowerCase()) : true;
+                const cpfMatch = baseFilterState.cpf ? item.cpf.includes(baseFilterState.cpf) : true;
+                const productMatch = baseFilterState.produto ? item.produto === baseFilterState.produto : true;
+                const courseMatch = baseFilterState.curso ? item.curso === baseFilterState.curso : true;
+                const statusMatch = baseFilterState.status !== 'all' ? item.status === baseFilterState.status : true;
+                return nameMatch && cpfMatch && productMatch && courseMatch && statusMatch;
+            }).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+        }
+
+        function renderBasesTable() {
+            const container = document.getElementById('bases-table-container');
+            const filteredData = filterBasesData();
+            const statuses = ["Pendente", "Interessado", "Não Interessado", "Convertido"];
+
+            let tableHTML = `<div class="overflow-x-auto bg-white rounded-xl shadow-2xl border"><table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-yellow-50"><tr>
+                    <th class="p-4 text-left font-medium text-gray-500 uppercase">Candidato</th>
+                    <th class="p-4 text-left font-medium text-gray-500 uppercase">Detalhes</th>
+                    <th class="p-4 text-left font-medium text-gray-500 uppercase">Status</th>
+                    <th class="p-4 text-center font-medium text-gray-500 uppercase">Ações</th>
+                </tr></thead><tbody class="bg-white divide-y divide-gray-200">`;
+
+            if (filteredData.length === 0) {
+                tableHTML += `<tr><td colspan="4" class="p-4 text-center text-gray-500">Nenhum registro encontrado.</td></tr>`;
+            } else {
+                filteredData.forEach(entry => {
+                    const statusColors = {
+                        'Pendente': 'bg-gray-200 text-gray-800',
+                        'Interessado': 'bg-blue-100 text-blue-800',
+                        'Não Interessado': 'bg-red-100 text-red-800',
+                        'Convertido': 'bg-green-100 text-green-800',
+                    };
+                    tableHTML += `<tr id="base-row-${entry.id}">
+                        <td class="p-4 align-top"><div class="font-bold">${entry.nome}</div><div>${entry.cpf || 'N/A'}</div><div>${entry.telefone}</div></td>
+                        <td class="p-4 align-top"><div><strong>Produto:</strong> ${entry.produto}</div><div><strong>Curso:</strong> ${entry.curso}</div><div><strong>Semestre:</strong> ${entry.semestre}</div></td>
+                        <td class="p-4 align-top">
+                            <select data-id="${entry.id}" class="base-status-selector rounded-lg p-2 border ${statusColors[entry.status] || 'bg-gray-200'}">
+                                ${statuses.map(s => `<option value="${s}" ${entry.status === s ? 'selected' : ''}>${s}</option>`).join('')}
+                            </select>
+                        </td>
+                        <td class="p-4 align-top text-center">
+                            <a href="https://wa.me/55${entry.telefone}" target="_blank" class="inline-block text-green-600 hover:text-green-800" title="Chamar no WhatsApp">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="currentColor" viewBox="0 0 16 16"><path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.557 6.557 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654s.71 1.916.81 2.049c.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z"/></svg>
+                            </a>
+                        </td>
+                    </tr>`;
+                });
+            }
+            tableHTML += '</tbody></table></div>';
+            container.innerHTML = tableHTML;
+            
+            container.addEventListener('change', (e) => {
+                if (e.target.classList.contains('base-status-selector')) {
+                    const { id } = e.target.dataset;
+                    const newStatus = e.target.value;
+                    handleBaseStatusUpdate(id, newStatus);
+                }
+            });
+        }
+
+        async function handleBaseStatusUpdate(id, status) {
+            try {
+                await updateDoc(doc(db, BASES_COLLECTION_PATH, id), { status });
+                showToast('Status atualizado com sucesso!', false);
+            } catch (error) {
+                console.error("Erro ao atualizar status da base:", error);
+                showToast("Erro ao atualizar status.", true);
+            }
+        }
+        
+        // --- 8. GAP Acadêmico ---
         function renderGapView() {
             const gapEl = document.getElementById('view-gap');
             gapEl.innerHTML = `
@@ -1209,7 +1521,7 @@
             }
         }
 
-        // --- 7. Painel de Administração ---
+        // --- 9. Painel de Administração ---
         function renderAdminPanel() {
             const adminEl = document.getElementById('view-admin');
             const attendants = usersData.map(u => ({ id: u.id, name: u.name })).sort((a, b) => a.name.localeCompare(b.name));
