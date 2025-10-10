@@ -157,17 +157,19 @@
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Variáveis de Configuração e Globais ---
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        // CORREÇÃO: Reintroduzido o fallback com as credenciais para contornar problemas no ambiente de produção.
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'gestaodeleadsangra-2cc1d';
         
-        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+        const firebaseConfig = typeof __firebase_config !== 'undefined' && __firebase_config !== "{}"
             ? JSON.parse(__firebase_config) 
             : {
-                apiKey: "", 
-                authDomain: "",
-                projectId: "",
-                storageBucket: "",
-                messagingSenderId: "",
-                appId: ""
+                // ATENÇÃO: As credenciais abaixo são um fallback. O ideal é que sejam fornecidas pelo ambiente.
+                apiKey: "AIzaSyDucVe9OerO1nDpvMaMhWquyxkcco1GTZA",
+                authDomain: "gestaodeleadsangra-2cc1d.firebaseapp.com",
+                projectId: "gestaodeleadsangra-2cc1d",
+                storageBucket: "gestaodeleadsangra-2cc1d.appspot.com",
+                messagingSenderId: "914587846773",
+                appId: "1:914587846773:web:fdd7dc3cc4fcf93529903c"
             };
         
         const LEADS_COLLECTION_PATH = `artifacts/${appId}/public/data/leads`;
@@ -337,7 +339,6 @@
         // --- 1. Inicialização do Firebase e Autenticação ---
         async function initApp() {
             try {
-                // CORREÇÃO: Validação robusta da configuração do Firebase antes de inicializar.
                 if (!firebaseConfig || !firebaseConfig.apiKey || !firebaseConfig.projectId) {
                     throw new Error("A configuração do Firebase (firebaseConfig) está ausente ou incompleta. A aplicação não pode ser iniciada.");
                 }
@@ -350,7 +351,6 @@
                     if (user && !user.isAnonymous) {
                         await handleUserLogin(user);
                     } else {
-                         // Se não houver utilizador, e nenhum token estiver a ser usado, mostra a tela de login.
                         if (typeof __initial_auth_token === 'undefined' || !__initial_auth_token) {
                             document.getElementById('loading-screen').classList.add('hidden');
                             handleUserLogout();
@@ -358,13 +358,11 @@
                     }
                 });
                 
-                // Tenta o login com token customizado, se disponível, com tratamento de erro isolado.
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                     try {
                         await signInWithCustomToken(auth, __initial_auth_token);
                     } catch (authError) {
                         console.error("Erro ao autenticar com token customizado:", authError);
-                        // Se o token falhar, não quebra a app, apenas mostra a tela de login.
                         document.getElementById('loading-screen').classList.add('hidden');
                         handleUserLogout();
                     }
@@ -374,7 +372,6 @@
 
             } catch (error) {
                 console.error("ERRO CRÍTICO NA INICIALIZAÇÃO:", error);
-                // Exibe a mensagem de erro específica para diagnóstico.
                 document.getElementById('loading-screen').innerHTML = `<div class="p-4 bg-red-100 text-red-700 rounded-lg text-center"><strong>Erro Fatal</strong><br>${error.message}</div>`;
             }
         }
