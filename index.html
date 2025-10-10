@@ -1274,19 +1274,18 @@
                 <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-teal-500 pb-2 mb-4">Base Histórica</h2>
                  <p class="text-gray-600 mb-8">Esta seção funciona como um arquivo morto ou uma base secundária, com as mesmas funcionalidades do GAP Acadêmico.</p>
                 
+                <div id="base-historica-dashboard-container" class="mb-8"></div>
+                
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
                     <div class="space-y-8">
                          <div>
                             <h3 class="text-xl font-bold text-gray-800 mb-2">Novo Cadastro</h3>
                             <div id="base-historica-registration-container" class="bg-white p-6 rounded-xl shadow-lg border"></div>
                         </div>
-                        <div>
-                            <h3 class="text-xl font-bold text-gray-800 mb-2">Importar em Lote (Excel)</h3>
-                            <div id="base-historica-import-container" class="bg-white p-6 rounded-xl shadow-lg border"></div>
-                        </div>
                     </div>
                      <div>
-                       <div id="base-historica-dashboard-container"></div>
+                        <h3 class="text-xl font-bold text-gray-800 mb-2">Importar em Lote (Excel)</h3>
+                        <div id="base-historica-import-container" class="bg-white p-6 rounded-xl shadow-lg border"></div>
                     </div>
                 </div>
 
@@ -1481,15 +1480,19 @@
                 // Fetch all data
                 const leadsSnapshot = await getDocs(query(collection(db, LEADS_COLLECTION_PATH)));
                 const gapSnapshot = await getDocs(query(collection(db, GAP_COLLECTION_PATH)));
+                const baseHistoricaSnapshot = await getDocs(query(collection(db, BASE_HISTORICA_COLLECTION_PATH)));
+                const plannerSnapshot = await getDocs(query(collection(db, PLANNER_SCHEDULE_COLLECTION_PATH)));
+
 
                 const backupData = {
                     leads: leadsSnapshot.docs.map(d => ({id: d.id, ...d.data()})),
                     gap_academico: gapSnapshot.docs.map(d => ({id: d.id, ...d.data()})),
-                    // Users are not backed up to avoid security issues with auth data.
+                    base_historica: baseHistoricaSnapshot.docs.map(d => ({id: d.id, ...d.data()})),
+                    planner_schedule: plannerSnapshot.docs.map(d => ({id: d.id, ...d.data()})),
                 };
 
                 // Create and download file
-                const jsonString = JSON.stringify(backupData, null, 2);
+                const jsonString = JSON.stringify(backupData);
                 const blob = new Blob([jsonString], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
