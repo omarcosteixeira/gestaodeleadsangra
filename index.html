@@ -157,11 +157,13 @@
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Variáveis de Configuração e Globais ---
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'gestaodeleadsangra-default';
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'gestaodeleadsangra-2cc1d';
         
         const firebaseConfig = typeof __firebase_config !== 'undefined' 
             ? JSON.parse(__firebase_config) 
             : {
+                // As chaves de API devem ser fornecidas pelo ambiente de produção.
+                // Deixar em branco para desenvolvimento local se usar emuladores ou um __firebase_config.
                 apiKey: "", 
                 authDomain: "",
                 projectId: "",
@@ -183,6 +185,7 @@
         let gapData = [];
         let plannerData = [];
         let currentView = 'cadastro';
+        let isAuthReady = false; // CORREÇÃO: Variável de estado para controlar a inicialização
         let unsubscribeLeads = () => {};
         let unsubscribeUsers = () => {};
         let unsubscribeGap = () => {};
@@ -341,18 +344,22 @@
                 auth = getAuth(app);
                 db = getFirestore(app);
 
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                }
-
                 onAuthStateChanged(auth, async (user) => {
                     document.getElementById('loading-screen').classList.add('hidden');
                     if (user && !user.isAnonymous) {
                         await handleUserLogin(user);
                     } else {
-                        handleUserLogout();
+                        // CORREÇÃO: Se não houver token customizado, tenta o login anônimo ou mostra a tela de login.
+                        if (typeof __initial_auth_token === 'undefined' || !__initial_auth_token) {
+                            handleUserLogout();
+                        }
                     }
                 });
+
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                }
+
                 document.getElementById('btn-logout').addEventListener('click', () => signOut(auth));
             } catch (error) {
                 console.error("Erro na inicialização do Firebase:", error);
@@ -361,8 +368,10 @@
         }
         
         async function handleUserLogin(user) {
+            // CORREÇÃO: O fluxo agora garante que o perfil do utilizador seja carregado antes de qualquer outra coisa.
             const userProfile = await fetchUserProfile(user.uid, user.email);
             currentUser = { uid: user.uid, email: user.email, ...userProfile };
+            isAuthReady = true; // Sinaliza que a autenticação e o carregamento do perfil estão completos.
             
             document.getElementById('auth-screen').classList.add('hidden');
             document.getElementById('app-container').classList.remove('hidden');
@@ -376,19 +385,19 @@
             `;
             document.getElementById('footer-content').innerText = "Sistema de Gestão de Leads | Criado por Marcos Teixeira";
             
-            if (canView('dashboard')) {
-                currentView = 'dashboard';
-            } else {
-                currentView = 'cadastro';
-            }
-
-            setupDataListeners();
             renderNav();
-            renderView(currentView);
+            setupDataListeners(); // Os listeners só são configurados depois que 'currentUser' está completo.
+
+            let initialView = 'cadastro';
+            if (canView('dashboard')) {
+                initialView = 'dashboard';
+            }
+            renderView(initialView);
         }
 
         function handleUserLogout() {
             currentUser = null;
+            isAuthReady = false; // Reseta o estado de autenticação
             leadsData = [];
             usersData = [];
             gapData = [];
@@ -491,7 +500,11 @@
         
         // --- 2. Listeners de Dados ---
         function setupDataListeners() {
-            if (!db || !currentUser) return;
+            // CORREÇÃO: Proteção para garantir que os listeners só rodem quando a autenticação estiver pronta.
+            if (!db || !currentUser || !isAuthReady) {
+                console.warn("A configuração dos listeners de dados foi abortada: a autenticação não está pronta.");
+                return;
+            }
             
             const usersQuery = query(collection(db, USERS_COLLECTION_PATH));
             unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
@@ -507,8 +520,8 @@
                             <span class="text-xs bg-blue-500 px-2 py-0.5 rounded-full">${currentUser.role}</span>
                         </div>`;
                 }
-                if (currentView === 'admin' || currentView === 'historico' || currentView === 'cadastro') renderView(currentView);
-            }, (error) => console.error("Erro ao ouvir usuários:", error));
+                if (['admin', 'historico', 'cadastro'].includes(currentView)) renderView(currentView);
+            }, (error) => console.error("Erro ao ouvir utilizadores:", error));
 
             let leadsQuery;
             if (canView('historico')) {
@@ -545,6 +558,8 @@
             }
         }
         
+        // O resto do código permanece o mesmo...
+
         // --- 3. Dashboard ---
         function renderDashboard() {
             const stats = calculateStats();
@@ -1291,9 +1306,9 @@
             if (!newName) { showToast('O nome não pode ficar em branco.', true); return; }
             try {
                 await updateDoc(doc(db, USERS_COLLECTION_PATH, uid), { name: newName, role: roleSelect.value });
-                showToast('Usuário atualizado!', false);
+                showToast('Utilizador atualizado!', false);
             } catch (error) {
-                showToast('Erro ao atualizar usuário.', true);
+                showToast('Erro ao atualizar utilizador.', true);
             }
         }
 
