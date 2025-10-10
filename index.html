@@ -157,13 +157,11 @@
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Variáveis de Configuração e Globais ---
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'gestaodeleadsangra-2cc1d';
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         
         const firebaseConfig = typeof __firebase_config !== 'undefined' 
             ? JSON.parse(__firebase_config) 
             : {
-                // As chaves de API devem ser fornecidas pelo ambiente de produção.
-                // Deixar em branco para desenvolvimento local se usar emuladores ou um __firebase_config.
                 apiKey: "", 
                 authDomain: "",
                 projectId: "",
@@ -185,7 +183,7 @@
         let gapData = [];
         let plannerData = [];
         let currentView = 'cadastro';
-        let isAuthReady = false; // CORREÇÃO: Variável de estado para controlar a inicialização
+        let isAuthReady = false;
         let unsubscribeLeads = () => {};
         let unsubscribeUsers = () => {};
         let unsubscribeGap = () => {};
@@ -339,40 +337,54 @@
         // --- 1. Inicialização do Firebase e Autenticação ---
         async function initApp() {
             try {
-                // setLogLevel('debug');
+                // CORREÇÃO: Validação robusta da configuração do Firebase antes de inicializar.
+                if (!firebaseConfig || !firebaseConfig.apiKey || !firebaseConfig.projectId) {
+                    throw new Error("A configuração do Firebase (firebaseConfig) está ausente ou incompleta. A aplicação não pode ser iniciada.");
+                }
+
                 const app = initializeApp(firebaseConfig);
                 auth = getAuth(app);
                 db = getFirestore(app);
 
                 onAuthStateChanged(auth, async (user) => {
-                    document.getElementById('loading-screen').classList.add('hidden');
                     if (user && !user.isAnonymous) {
                         await handleUserLogin(user);
                     } else {
-                        // CORREÇÃO: Se não houver token customizado, tenta o login anônimo ou mostra a tela de login.
+                         // Se não houver utilizador, e nenhum token estiver a ser usado, mostra a tela de login.
                         if (typeof __initial_auth_token === 'undefined' || !__initial_auth_token) {
+                            document.getElementById('loading-screen').classList.add('hidden');
                             handleUserLogout();
                         }
                     }
                 });
-
+                
+                // Tenta o login com token customizado, se disponível, com tratamento de erro isolado.
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
+                    try {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } catch (authError) {
+                        console.error("Erro ao autenticar com token customizado:", authError);
+                        // Se o token falhar, não quebra a app, apenas mostra a tela de login.
+                        document.getElementById('loading-screen').classList.add('hidden');
+                        handleUserLogout();
+                    }
                 }
 
                 document.getElementById('btn-logout').addEventListener('click', () => signOut(auth));
+
             } catch (error) {
-                console.error("Erro na inicialização do Firebase:", error);
-                document.getElementById('loading-screen').innerHTML = `<div class="p-4 bg-red-100 text-red-700 rounded-lg">Erro fatal. Verifique o console.</div>`;
+                console.error("ERRO CRÍTICO NA INICIALIZAÇÃO:", error);
+                // Exibe a mensagem de erro específica para diagnóstico.
+                document.getElementById('loading-screen').innerHTML = `<div class="p-4 bg-red-100 text-red-700 rounded-lg text-center"><strong>Erro Fatal</strong><br>${error.message}</div>`;
             }
         }
         
         async function handleUserLogin(user) {
-            // CORREÇÃO: O fluxo agora garante que o perfil do utilizador seja carregado antes de qualquer outra coisa.
             const userProfile = await fetchUserProfile(user.uid, user.email);
             currentUser = { uid: user.uid, email: user.email, ...userProfile };
-            isAuthReady = true; // Sinaliza que a autenticação e o carregamento do perfil estão completos.
+            isAuthReady = true;
             
+            document.getElementById('loading-screen').classList.add('hidden');
             document.getElementById('auth-screen').classList.add('hidden');
             document.getElementById('app-container').classList.remove('hidden');
             
@@ -386,7 +398,7 @@
             document.getElementById('footer-content').innerText = "Sistema de Gestão de Leads | Criado por Marcos Teixeira";
             
             renderNav();
-            setupDataListeners(); // Os listeners só são configurados depois que 'currentUser' está completo.
+            setupDataListeners();
 
             let initialView = 'cadastro';
             if (canView('dashboard')) {
@@ -397,7 +409,7 @@
 
         function handleUserLogout() {
             currentUser = null;
-            isAuthReady = false; // Reseta o estado de autenticação
+            isAuthReady = false;
             leadsData = [];
             usersData = [];
             gapData = [];
@@ -500,7 +512,6 @@
         
         // --- 2. Listeners de Dados ---
         function setupDataListeners() {
-            // CORREÇÃO: Proteção para garantir que os listeners só rodem quando a autenticação estiver pronta.
             if (!db || !currentUser || !isAuthReady) {
                 console.warn("A configuração dos listeners de dados foi abortada: a autenticação não está pronta.");
                 return;
