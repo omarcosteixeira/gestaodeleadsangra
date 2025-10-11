@@ -195,7 +195,7 @@
         
         let leadFilterState = { acao: '', dia: '', promotorId: '', converted: 'all', telefone: '', curso: '' };
         let gapFilterState = { nome: '', cpf: '', matAcad: 'all', gap: 'all', produto: '', curso: '', semestre: '', metodologia: '', formaIngresso: '' };
-        let baseFilterState = { nome: '', cpf: '', produto: '', curso: '', semestre: '', metodologia: '', formaIngresso: '', status: 'all' };
+        let baseFilterState = { nome: '', cpf: '', produto: '', curso: '', nomeBase: '', status: 'all' };
 
         // --- Configuração de Perfis e Permissões ---
         const ROLES = { 
@@ -1079,6 +1079,7 @@
             container.innerHTML = `
                 <div id="base-message" class="hidden mb-4 p-3 rounded-lg text-center font-medium"></div>
                 <form id="base-form" class="space-y-3">
+                    ${renderInputField("Nome da Base", "base-nomeBase", "text", true, "Ex: Base de Marketing", ICONS.TAG)}
                     ${renderSelectField("Produto", "base-produto", produtos, true, ICONS.BOOKMARK)}
                     ${renderInputField("Nome", "base-nome", "text", true, "Nome completo", ICONS.USER)}
                     ${renderInputField("CPF", "base-cpf", "text", false, "Apenas números", ICONS.HASH)}
@@ -1100,6 +1101,7 @@
             const msgEl = document.getElementById('base-message');
             
             const newEntry = {
+                nomeBase: form['base-nomeBase'].value,
                 produto: form['base-produto'].value,
                 nome: form['base-nome'].value,
                 cpf: formatCpf(form['base-cpf'].value),
@@ -1114,7 +1116,7 @@
                 createdBy: currentUser.uid,
             };
             
-            if(!newEntry.produto || !newEntry.nome || !newEntry.telefone || !newEntry.curso || !newEntry.semestre) {
+            if(!newEntry.nomeBase || !newEntry.produto || !newEntry.nome || !newEntry.telefone || !newEntry.curso || !newEntry.semestre) {
                 showMessage(msgEl, 'Preencha os campos obrigatórios.', true);
                 return;
             }
@@ -1136,7 +1138,7 @@
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Importar de Arquivo Excel (.xlsx)</label>
                         <input type="file" id="bases-file-import-input" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-yellow-50 file:text-yellow-700 hover:file:bg-yellow-100"/>
-                        <p class="text-xs text-gray-500 mt-1">Colunas: <code class="bg-gray-100 p-1 rounded">Produto,Nome,CPF,Telefone,N_Oportunidade,Curso,Semestre,Metodologia,Forma_Ingresso</code>.</p>
+                        <p class="text-xs text-gray-500 mt-1">Colunas: <code class="bg-gray-100 p-1 rounded">Nome_Base,Produto,Nome,CPF,Telefone,N_Oportunidade,Curso,Semestre,Metodologia,Forma_Ingresso</code>.</p>
                     </div>
                     <button id="btn-import-bases-file" class="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center">${ICONS.UPLOAD} <span>Importar Arquivo</span></button>
                     <div id="bases-file-import-results" class="mt-4 text-sm space-y-2"></div>
@@ -1172,13 +1174,14 @@
 
                      json.forEach((row, index) => {
                          const entry = {
+                             nomeBase: row.Nome_Base,
                              produto: row.Produto, nome: row.Nome, cpf: formatCpf(row.CPF), telefone: formatPhone(row.Telefone),
                              nOportunidade: row.N_Oportunidade || '', curso: row.Curso, semestre: row.Semestre,
                              metodologia: row.Metodologia || '', formaIngresso: row.Forma_Ingresso || '',
                              status: 'Pendente', createdAt: serverTimestamp(), createdBy: currentUser.uid,
                          };
-                         if (!entry.produto || !entry.nome || !entry.telefone) {
-                             errors.push(`Linha ${index + 2}: Campos obrigatórios faltando.`);
+                         if (!entry.nomeBase || !entry.produto || !entry.nome || !entry.telefone) {
+                             errors.push(`Linha ${index + 2}: Campos obrigatórios faltando (Nome_Base, Produto, Nome, Telefone).`);
                          } else {
                              entriesToImport.push(entry);
                          }
@@ -1212,6 +1215,7 @@
                 return;
             }
             const sheetData = dataToExport.map(item => ({
+                "Nome da Base": item.nomeBase,
                 Produto: item.produto, Nome: item.nome, CPF: item.cpf, Telefone: item.telefone,
                 "N° Oportunidade": item.nOportunidade, Curso: item.curso, Semestre: item.semestre,
                 Metodologia: item.metodologia, "Forma de Ingresso": item.formaIngresso, Status: item.status
@@ -1226,9 +1230,10 @@
             const container = document.getElementById('bases-filters-container');
             const unique = (key) => [...new Set(basesData.map(item => item[key]).filter(Boolean))].sort();
             container.innerHTML = `
-                <div class="bg-white p-6 rounded-xl shadow-lg grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 border" id="base-filter-form">
+                <div class="bg-white p-6 rounded-xl shadow-lg grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 border" id="base-filter-form">
                     ${renderFilterInput("Nome", "nome", baseFilterState.nome, ICONS.USER, "Buscar...")}
                     ${renderFilterInput("CPF", "cpf", baseFilterState.cpf, ICONS.HASH, "Buscar...")}
+                    ${renderFilterSelect("Nome da Base", "nomeBase", unique('nomeBase'), baseFilterState.nomeBase, ICONS.TAG)}
                     ${renderFilterSelect("Produto", "produto", unique('produto'), baseFilterState.produto, ICONS.BOOKMARK)}
                     ${renderFilterSelect("Curso", "curso", unique('curso'), baseFilterState.curso, ICONS.ACADEMIC)}
                     ${renderFilterSelect("Status", "status", ["Pendente", "Convertido", "Interessado", "Não Interessado"], baseFilterState.status, ICONS.CHECK)}
@@ -1239,7 +1244,7 @@
             form.addEventListener('input', e => handleBaseFilterChange(e.target.name, e.target.value));
             form.addEventListener('change', e => handleBaseFilterChange(e.target.name, e.target.value));
             document.getElementById('btn-clear-base-filters').addEventListener('click', () => {
-                baseFilterState = { nome: '', cpf: '', produto: '', curso: '', status: 'all' };
+                baseFilterState = { nome: '', cpf: '', produto: '', curso: '', nomeBase: '', status: 'all' };
                 renderBasesView();
             });
         }
@@ -1255,8 +1260,9 @@
                 const cpfMatch = baseFilterState.cpf ? item.cpf.includes(baseFilterState.cpf) : true;
                 const productMatch = baseFilterState.produto ? item.produto === baseFilterState.produto : true;
                 const courseMatch = baseFilterState.curso ? item.curso === baseFilterState.curso : true;
+                const nomeBaseMatch = baseFilterState.nomeBase ? item.nomeBase === baseFilterState.nomeBase : true;
                 const statusMatch = baseFilterState.status !== 'all' ? item.status === baseFilterState.status : true;
-                return nameMatch && cpfMatch && productMatch && courseMatch && statusMatch;
+                return nameMatch && cpfMatch && productMatch && courseMatch && nomeBaseMatch && statusMatch;
             }).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
         }
 
@@ -1285,7 +1291,7 @@
                     };
                     tableHTML += `<tr id="base-row-${entry.id}">
                         <td class="p-4 align-top"><div class="font-bold">${entry.nome}</div><div>${entry.cpf || 'N/A'}</div><div>${entry.telefone}</div></td>
-                        <td class="p-4 align-top"><div><strong>Produto:</strong> ${entry.produto}</div><div><strong>Curso:</strong> ${entry.curso}</div><div><strong>Semestre:</strong> ${entry.semestre}</div></td>
+                        <td class="p-4 align-top"><div><strong>Base:</strong> ${entry.nomeBase}</div><div><strong>Produto:</strong> ${entry.produto}</div><div><strong>Curso:</strong> ${entry.curso}</div></td>
                         <td class="p-4 align-top">
                             <select data-id="${entry.id}" class="base-status-selector rounded-lg p-2 border ${statusColors[entry.status] || 'bg-gray-200'}">
                                 ${statuses.map(s => `<option value="${s}" ${entry.status === s ? 'selected' : ''}>${s}</option>`).join('')}
