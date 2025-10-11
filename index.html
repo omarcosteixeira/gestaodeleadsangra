@@ -1101,13 +1101,13 @@
             const msgEl = document.getElementById('base-message');
             
             const newEntry = {
-                nomeBase: form['base-nomeBase'].value,
+                nomeBase: form['base-nomeBase'].value.trim(),
                 produto: form['base-produto'].value,
-                nome: form['base-nome'].value,
+                nome: form['base-nome'].value.trim(),
                 cpf: formatCpf(form['base-cpf'].value),
                 telefone: formatPhone(form['base-telefone'].value),
                 nOportunidade: form['base-oportunidade'].value || '',
-                curso: form['base-curso'].value,
+                curso: form['base-curso'].value.trim(),
                 semestre: form['base-semestre'].value,
                 metodologia: form['base-metodologia'].value,
                 formaIngresso: form['base-formaIngresso'].value,
@@ -1118,6 +1118,17 @@
             
             if(!newEntry.nomeBase || !newEntry.produto || !newEntry.nome || !newEntry.telefone || !newEntry.curso || !newEntry.semestre) {
                 showMessage(msgEl, 'Preencha os campos obrigatórios.', true);
+                return;
+            }
+
+            const isDuplicate = basesData.some(base => 
+                base.nome.toLowerCase() === newEntry.nome.toLowerCase() &&
+                base.telefone === newEntry.telefone &&
+                base.nomeBase.toLowerCase() === newEntry.nomeBase.toLowerCase()
+            );
+
+            if (isDuplicate) {
+                showMessage(msgEl, 'ERRO: Cadastro duplicado. Já existe um registro com o mesmo nome, telefone e nome da base.', true);
                 return;
             }
 
@@ -1174,16 +1185,40 @@
 
                      json.forEach((row, index) => {
                          const entry = {
-                             nomeBase: row.Nome_Base,
-                             produto: row.Produto, nome: row.Nome, cpf: formatCpf(row.CPF), telefone: formatPhone(row.Telefone),
-                             nOportunidade: row.N_Oportunidade || '', curso: row.Curso, semestre: row.Semestre,
-                             metodologia: row.Metodologia || '', formaIngresso: row.Forma_Ingresso || '',
-                             status: 'Pendente', createdAt: serverTimestamp(), createdBy: currentUser.uid,
+                             nomeBase: row.Nome_Base ? String(row.Nome_Base).trim() : '',
+                             produto: row.Produto ? String(row.Produto).trim() : '', 
+                             nome: row.Nome ? String(row.Nome).trim() : '', 
+                             cpf: formatCpf(row.CPF), 
+                             telefone: formatPhone(row.Telefone),
+                             nOportunidade: row.N_Oportunidade || '', 
+                             curso: row.Curso ? String(row.Curso).trim() : '', 
+                             semestre: String(row.Semestre || ''),
+                             metodologia: row.Metodologia || '', 
+                             formaIngresso: row.Forma_Ingresso || '',
+                             status: 'Pendente', 
+                             createdAt: serverTimestamp(), 
+                             createdBy: currentUser.uid,
                          };
                          if (!entry.nomeBase || !entry.produto || !entry.nome || !entry.telefone) {
                              errors.push(`Linha ${index + 2}: Campos obrigatórios faltando (Nome_Base, Produto, Nome, Telefone).`);
                          } else {
-                             entriesToImport.push(entry);
+                            const isDuplicateInDb = basesData.some(base => 
+                                base.nome.toLowerCase() === entry.nome.toLowerCase() &&
+                                base.telefone === entry.telefone &&
+                                base.nomeBase.toLowerCase() === entry.nomeBase.toLowerCase()
+                            );
+
+                            const isDuplicateInFile = entriesToImport.some(item =>
+                                item.nome.toLowerCase() === entry.nome.toLowerCase() &&
+                                item.telefone === entry.telefone &&
+                                item.nomeBase.toLowerCase() === entry.nomeBase.toLowerCase()
+                            );
+
+                            if (isDuplicateInDb || isDuplicateInFile) {
+                                errors.push(`Linha ${index + 2}: Cadastro duplicado (nome, telefone e nome da base já existem).`);
+                            } else {
+                                entriesToImport.push(entry);
+                            }
                          }
                      });
 
