@@ -200,15 +200,16 @@
         // --- Configuração de Perfis e Permissões ---
         const ROLES = { 
             PROMOTOR: 'Promotor', 
+            FDV: 'FDV', // Novo Perfil
             SALA_MATRICULA: 'Sala de Matrícula',
             QG: 'QG', 
             LIDER_FDV: 'Líder/FDV' 
         };
 
         const VIEW_PERMISSIONS = { 
-            'dashboard': [ROLES.PROMOTOR, ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV],
-            'cadastro':  [ROLES.PROMOTOR, ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV], 
-            'historico': [ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV], 
+            'dashboard': [ROLES.PROMOTOR, ROLES.FDV, ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV],
+            'cadastro':  [ROLES.PROMOTOR, ROLES.FDV, ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV], 
+            'historico': [ROLES.FDV, ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV], 
             'bases':     [ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV],
             'gap':       [ROLES.SALA_MATRICULA, ROLES.LIDER_FDV],
             'admin':     [ROLES.LIDER_FDV] 
@@ -541,9 +542,17 @@
             }, (error) => console.error("Erro ao ouvir utilizadores:", error));
 
             let leadsQuery;
-            if (canView('historico')) {
+            const userRole = currentUser.role;
+
+            if (userRole === ROLES.LIDER_FDV || userRole === ROLES.SALA_MATRICULA || userRole === ROLES.QG) {
                 leadsQuery = query(collection(db, LEADS_COLLECTION_PATH));
-            } else if(canView('cadastro')) {
+            } else if (userRole === ROLES.FDV) {
+                const promoterIds = usersData.filter(user => user.role === ROLES.PROMOTOR).map(user => user.id);
+                const allowedIds = [...promoterIds, currentUser.uid];
+                if (allowedIds.length > 0) {
+                     leadsQuery = query(collection(db, LEADS_COLLECTION_PATH), where("promotorId", "in", allowedIds));
+                }
+            } else if (userRole === ROLES.PROMOTOR) {
                 leadsQuery = query(collection(db, LEADS_COLLECTION_PATH), where("promotorId", "==", currentUser.uid));
             }
 
