@@ -200,7 +200,7 @@
         // --- Configuração de Perfis e Permissões ---
         const ROLES = { 
             PROMOTOR: 'Promotor', 
-            FDV: 'FDV', // Novo Perfil
+            FDV: 'FDV',
             SALA_MATRICULA: 'Sala de Matrícula',
             QG: 'QG', 
             LIDER_FDV: 'Líder/FDV' 
@@ -1539,7 +1539,7 @@
                     tableHTML += `<tr id="gap-row-${entry.id}">
                         <td class="p-4 align-top"><div class="font-bold">${entry.nome}</div><div>${entry.cpf}</div></td>
                         <td class="p-4 align-top"><div><strong>Curso:</strong> ${entry.curso}</div><div><strong>Ingresso:</strong> ${entry.formaIngresso}</div></td>
-                        <td class="p-4 align-top"><div class="flex flex-wrap gap-2">${Object.entries(docLabels).map(([key, label]) => `<button class="doc-toggle ${entry.documentos[key] ? 'doc-sim' : 'doc-nao'}" data-id="${entry.id}" data-doc="${key}">${label}</button>`).join('')}</div></td>
+                        <td class="p-4 align-top"><div class="flex flex-wrap gap-2">${Object.entries(docLabels).map(([key, label]) => `<button class="doc-toggle ${(entry.documentos && entry.documentos[key]) ? 'doc-sim' : 'doc-nao'}" data-id="${entry.id}" data-doc="${key}">${label}</button>`).join('')}</div></td>
                         <td class="p-4 align-top"><button class="doc-toggle ${entry.matAcad ? 'doc-sim' : 'doc-nao'}" data-id="${entry.id}" data-action="toggleMatAcad">${entry.matAcad ? 'Sim' : 'Não'}</button></td>
                         <td class="p-4 align-top"><span class="px-2 py-1 font-semibold rounded-full ${statusClass}">${statusText}</span></td>
                         <td class="p-4 align-top"><textarea class="obs-input w-full border rounded p-1" data-id="${entry.id}" rows="2">${entry.observacao || ''}</textarea></td>
@@ -1554,12 +1554,22 @@
                 const target = e.target.closest('.doc-toggle');
                 if (target) {
                     const { id, doc, action } = target.dataset;
-                    if (action === 'toggleMatAcad') handleGapUpdate(id, { matAcad: !target.classList.contains('doc-nao') });
-                    else if (doc) handleGapUpdate(id, { [`documentos.${doc}`]: !target.classList.contains('doc-nao') });
+                    const entry = gapData.find(g => g.id === id);
+                    if (!entry) return;
+
+                    if (action === 'toggleMatAcad') {
+                        const currentStatus = entry.matAcad || false;
+                        handleGapUpdate(id, { matAcad: !currentStatus });
+                    } else if (doc) {
+                        const currentDocStatus = (entry.documentos && entry.documentos[doc]) || false;
+                        handleGapUpdate(id, { [`documentos.${doc}`]: !currentDocStatus });
+                    }
                 }
             });
             container.addEventListener('change', (e) => {
-                if (e.target.matches('.obs-input')) handleGapUpdate(e.target.dataset.id, { observacao: e.target.value });
+                if (e.target.matches('.obs-input')) {
+                    handleGapUpdate(e.target.dataset.id, { observacao: e.target.value });
+                }
             });
         }
 
