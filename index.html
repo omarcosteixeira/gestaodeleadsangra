@@ -176,6 +176,8 @@
         const GAP_COLLECTION_PATH = `artifacts/${appId}/public/data/gap_academico`;
         const PLANNER_COLLECTION_PATH = `artifacts/${appId}/public/data/planner`;
         const BASES_COLLECTION_PATH = `artifacts/${appId}/public/data/bases`;
+        const BOM_DIA_CAPTACAO_COLLECTION_PATH = `artifacts/${appId}/public/data/bomDiaCaptacao`;
+        const FORECAST_CAPTACAO_COLLECTION_PATH = `artifacts/${appId}/public/data/forecastCaptacao`;
 
         let db;
         let auth;
@@ -185,6 +187,8 @@
         let gapData = [];
         let plannerData = [];
         let basesData = [];
+        let bomDiaCaptacaoData = [];
+        let forecastData = [];
         let currentView = 'cadastro';
         let isAuthReady = false;
         let unsubscribeLeads = () => {};
@@ -192,6 +196,8 @@
         let unsubscribeGap = () => {};
         let unsubscribePlanner = () => {};
         let unsubscribeBases = () => {};
+        let unsubscribeBomDiaCaptacao = () => {};
+        let unsubscribeForecastCaptacao = () => {};
         
         let leadFilterState = { acao: '', dia: '', promotorId: '', converted: 'all', telefone: '', curso: '' };
         let gapFilterState = { nome: '', cpf: '', matAcad: 'all', gap: 'all', produto: '', curso: '', semestre: '', metodologia: '', formaIngresso: '' };
@@ -356,11 +362,13 @@
                 auth = getAuth(app);
                 db = getFirestore(app);
 
+                let customTokenAttempted = false;
+
                 onAuthStateChanged(auth, async (user) => {
                     if (user && !user.isAnonymous) {
                         await handleUserLogin(user);
                     } else {
-                        if (typeof __initial_auth_token === 'undefined' || !__initial_auth_token) {
+                        if (customTokenAttempted || (typeof __initial_auth_token === 'undefined' || !__initial_auth_token)) {
                             document.getElementById('loading-screen').classList.add('hidden');
                             handleUserLogout();
                         }
@@ -368,13 +376,15 @@
                 });
                 
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    customTokenAttempted = true;
                     try {
                         await signInWithCustomToken(auth, __initial_auth_token);
                     } catch (authError) {
                         console.error("Erro ao autenticar com token customizado:", authError);
-                        document.getElementById('loading-screen').classList.add('hidden');
-                        handleUserLogout();
+                        // O observer onAuthStateChanged vai lidar com o estado de não-logado.
                     }
+                } else {
+                    customTokenAttempted = true; // Se não há token, o estado inicial já pode ser decidido.
                 }
 
                 document.getElementById('btn-logout').addEventListener('click', () => signOut(auth));
@@ -420,11 +430,15 @@
             usersData = [];
             gapData = [];
             plannerData = [];
+            bomDiaCaptacaoData = [];
+            forecastData = [];
             unsubscribeLeads();
             unsubscribeUsers();
             unsubscribeGap();
             unsubscribePlanner();
             unsubscribeBases();
+            unsubscribeBomDiaCaptacao();
+            unsubscribeForecastCaptacao();
             document.getElementById('app-container').classList.add('hidden');
             document.getElementById('auth-screen').classList.remove('hidden');
             renderAuthScreen(true);
@@ -589,20 +603,38 @@
                         renderView(currentView);
                     }
                 }, (error) => console.error("Erro ao ouvir planner:", error));
+                
+                const captacaoQuery = query(collection(db, BOM_DIA_CAPTACAO_COLLECTION_PATH));
+                unsubscribeBomDiaCaptacao = onSnapshot(captacaoQuery, (snapshot) => {
+                    bomDiaCaptacaoData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    if (currentView === 'dashboard' || currentView === 'admin') {
+                        renderView(currentView);
+                    }
+                }, (error) => console.error("Erro ao ouvir Bom Dia Captação:", error));
+
+                const forecastQuery = query(collection(db, FORECAST_CAPTACAO_COLLECTION_PATH));
+                unsubscribeForecastCaptacao = onSnapshot(forecastQuery, (snapshot) => {
+                    forecastData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    if (currentView === 'dashboard' || currentView === 'admin') {
+                        renderView(currentView);
+                    }
+                }, (error) => console.error("Erro ao ouvir Forecast Captação:", error));
             }
         }
         
         // --- 3. Dashboard ---
         function renderDashboard() {
-            const stats = calculateStats();
             const dashboardEl = document.getElementById('view-dashboard');
             dashboardEl.innerHTML = `
-                <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-blue-500 pb-2 mb-4">Painel Principal</h2>
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                    ${renderStatCard("Total de Leads", stats.totalLeads, ICONS.USERS, "bg-blue-500")}
-                    ${renderStatCard("Leads Convertidos", stats.convertedLeads, ICONS.CHECK, "bg-green-500")}
-                    ${renderStatCard("Taxa de Conversão", `${stats.conversionRate}%`, ICONS.PERCENT, "bg-purple-500")}
-                    ${renderStatCard("Seus Leads", stats.userLeads, ICONS.USER, "bg-yellow-500")}
+                <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-blue-500 pb-2 mb-8">Bom Dia Captação</h2>
+                <div id="bom-dia-captacao-container" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
+                    ${renderBomDiaCaptacaoCards()}
+                </div>
+                <div class="mt-12">
+                    <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-purple-500 pb-2 mb-8">Forecast da Captação</h2>
+                    <div id="forecast-captacao-container" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
+                        ${renderForecastCaptacaoCards()}
+                    </div>
                 </div>
                 <div class="mt-12">
                     <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-green-500 pb-2 mb-4">Planner da Semana</h2>
@@ -612,6 +644,148 @@
                 </div>
             `;
         }
+        
+        function renderBomDiaCaptacaoCards() {
+            if (!bomDiaCaptacaoData || bomDiaCaptacaoData.length === 0) {
+                return '<div class="col-span-full bg-white p-6 rounded-xl shadow-lg border text-center text-gray-500">Nenhum dado de captação para exibir. Adicione na aba Gerenciar.</div>';
+            }
+
+            const calculateMetrics = (real, meta, anterior) => {
+                const percMeta = meta > 0 ? (real / meta) : 0;
+                const percAnterior = anterior > 0 ? (real / anterior) : 0;
+                const gapMeta = real - meta;
+                const gapAnterior = real - anterior;
+                return { percMeta, percAnterior, gapMeta, gapAnterior };
+            };
+            
+            const formatNum = (val) => new Intl.NumberFormat('pt-BR').format(val);
+            const formatPercent = (val) => new Intl.NumberFormat('pt-BR', { style: 'percent', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(val);
+            const formatGap = (val) => val > 0 ? `+${formatNum(val)}` : formatNum(val);
+            const gapColor = (val) => val >= 0 ? 'text-green-600' : 'text-red-600';
+            const percentColor = (val) => val >= 1 ? 'text-green-600' : 'text-red-600';
+
+            return bomDiaCaptacaoData.sort((a,b) => a.title.localeCompare(b.title)).map(item => {
+                const insc = calculateMetrics(item.real.insc, item.metaDia.insc, item.anoAnterior.insc);
+                const matFin = calculateMetrics(item.real.matFin, item.metaDia.matFin, item.anoAnterior.matFin);
+                const matAcad = calculateMetrics(item.real.matAcad, item.metaDia.matAcad, item.anoAnterior.matAcad);
+
+                return `
+                <div class="bg-white p-4 rounded-xl shadow-lg border-t-4 border-blue-500 col-span-1">
+                    <h3 class="font-bold text-center text-gray-800 mb-4">${item.title}</h3>
+                    <table class="w-full text-sm text-center">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="p-2 font-semibold text-gray-600 text-left">Métrica</th>
+                                <th class="p-2 font-semibold text-gray-600">INSC</th>
+                                <th class="p-2 font-semibold text-gray-600">MAT FIN</th>
+                                <th class="p-2 font-semibold text-gray-600">MAT ACAD</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            <tr class="text-gray-500">
+                                <td class="p-2 text-left font-medium">META DIA</td>
+                                <td>${formatNum(item.metaDia.insc)}</td>
+                                <td>${formatNum(item.metaDia.matFin)}</td>
+                                <td>${formatNum(item.metaDia.matAcad)}</td>
+                            </tr>
+                            <tr class="text-gray-500">
+                                <td class="p-2 text-left font-medium">ANO ANTERIOR</td>
+                                <td>${formatNum(item.anoAnterior.insc)}</td>
+                                <td>${formatNum(item.anoAnterior.matFin)}</td>
+                                <td>${formatNum(item.anoAnterior.matAcad)}</td>
+                            </tr>
+                            <tr class="bg-blue-50 font-bold text-blue-800">
+                                <td class="p-2 text-left">REAL</td>
+                                <td>${formatNum(item.real.insc)}</td>
+                                <td>${formatNum(item.real.matFin)}</td>
+                                <td>${formatNum(item.real.matAcad)}</td>
+                            </tr>
+                            <tr>
+                                <td class="p-2 text-left font-medium text-gray-500">% META DIA</td>
+                                <td class="${percentColor(insc.percMeta)} font-semibold">${formatPercent(insc.percMeta)}</td>
+                                <td class="${percentColor(matFin.percMeta)} font-semibold">${formatPercent(matFin.percMeta)}</td>
+                                <td class="${percentColor(matAcad.percMeta)} font-semibold">${formatPercent(matAcad.percMeta)}</td>
+                            </tr>
+                            <tr>
+                                <td class="p-2 text-left font-medium text-gray-500">% ANO ANT.</td>
+                                <td class="${percentColor(insc.percAnterior)} font-semibold">${formatPercent(insc.percAnterior)}</td>
+                                <td class="${percentColor(matFin.percAnterior)} font-semibold">${formatPercent(matFin.percAnterior)}</td>
+                                <td class="${percentColor(matAcad.percAnterior)} font-semibold">${formatPercent(matAcad.percAnterior)}</td>
+                            </tr>
+                            <tr>
+                                <td class="p-2 text-left font-medium text-gray-500">GAP META DIA</td>
+                                <td class="${gapColor(insc.gapMeta)} font-semibold">${formatGap(insc.gapMeta)}</td>
+                                <td class="${gapColor(matFin.gapMeta)} font-semibold">${formatGap(matFin.gapMeta)}</td>
+                                <td class="${gapColor(matAcad.gapMeta)} font-semibold">${formatGap(matAcad.gapMeta)}</td>
+                            </tr>
+                             <tr>
+                                <td class="p-2 text-left font-medium text-gray-500">GAP ANO ANT.</td>
+                                <td class="${gapColor(insc.gapAnterior)} font-semibold">${formatGap(insc.gapAnterior)}</td>
+                                <td class="${gapColor(matFin.gapAnterior)} font-semibold">${formatGap(matFin.gapAnterior)}</td>
+                                <td class="${gapColor(matAcad.gapAnterior)} font-semibold">${formatGap(matAcad.gapAnterior)}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                `;
+            }).join('');
+        }
+
+        function renderForecastCaptacaoCards() {
+            if (!forecastData || forecastData.length === 0) {
+                return '<div class="col-span-full bg-white p-6 rounded-xl shadow-lg border text-center text-gray-500">Nenhum dado de forecast para exibir. Adicione na aba Gerenciar.</div>';
+            }
+            
+            const formatNum = (val) => new Intl.NumberFormat('pt-BR').format(val);
+            const formatPercent = (val) => new Intl.NumberFormat('pt-BR', { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(val);
+            const formatGap = (val) => val > 0 ? `+${formatNum(val)}` : formatNum(val);
+            const gapColor = (val) => val >= 0 ? 'text-green-600' : 'text-red-600';
+            const percentColor = (val) => val >= 1 ? 'text-green-600' : 'text-orange-500';
+
+            return forecastData.sort((a,b) => a.title.localeCompare(b.title)).map(item => {
+                const realVsYtd = item.ytd > 0 ? item.real / item.ytd : 0;
+                const projVsMeta = item.meta > 0 ? item.projecao / item.meta : 0;
+                const gap = item.projecao - item.meta;
+
+                return `
+                <div class="bg-white p-6 rounded-xl shadow-lg border-t-4 border-purple-500 col-span-1">
+                    <h3 class="font-bold text-center text-gray-800 text-lg mb-4">${item.title}</h3>
+                    <div class="space-y-4 text-sm">
+                        <div class="flex justify-between items-center bg-gray-50 p-2 rounded">
+                            <span class="font-semibold text-gray-600">YTD</span>
+                            <span class="font-bold text-gray-800">${formatNum(item.ytd)}</span>
+                        </div>
+                        <div class="flex justify-between items-center bg-gray-50 p-2 rounded">
+                            <span class="font-semibold text-gray-600">REAL</span>
+                            <span class="font-bold text-blue-600 text-base">${formatNum(item.real)}</span>
+                        </div>
+                        <div class="flex justify-between items-center bg-gray-50 p-2 rounded">
+                            <span class="font-semibold text-gray-600">REAL vs YTD</span>
+                            <span class="font-bold ${percentColor(realVsYtd)}">${formatPercent(realVsYtd)}</span>
+                        </div>
+                        <div class="border-t my-2"></div>
+                        <div class="flex justify-between items-center bg-gray-50 p-2 rounded">
+                            <span class="font-semibold text-gray-600">META FECHAMENTO</span>
+                            <span class="font-bold text-gray-800">${formatNum(item.meta)}</span>
+                        </div>
+                        <div class="flex justify-between items-center bg-gray-50 p-2 rounded">
+                            <span class="font-semibold text-gray-600">PROJEÇÃO</span>
+                            <span class="font-bold text-blue-600 text-base">${formatNum(item.projecao)}</span>
+                        </div>
+                        <div class="flex justify-between items-center bg-gray-50 p-2 rounded">
+                            <span class="font-semibold text-gray-600">PROJEÇÃO vs META</span>
+                            <span class="font-bold ${percentColor(projVsMeta)}">${formatPercent(projVsMeta)}</span>
+                        </div>
+                        <div class="flex justify-between items-center bg-gray-50 p-2 rounded">
+                            <span class="font-semibold text-gray-600">GAP P/ FECHAMENTO</span>
+                            <span class="font-bold ${gapColor(gap)}">${formatGap(gap)}</span>
+                        </div>
+                    </div>
+                </div>
+                `;
+            }).join('');
+        }
+
 
         function calculateStats() {
             const totalLeads = leadsData.length;
@@ -894,13 +1068,28 @@
         // --- 5. Histórico de Leads ---
         function renderHistory() {
             const historyEl = document.getElementById('view-historico');
+            const stats = calculateStats();
             const uniqueActions = [...new Set(leadsData.map(lead => lead.acao).filter(Boolean))].sort();
-            const promotors = [...new Map(usersData.map(user => [user.id, user.name])).values()].filter(Boolean).sort();
+            
+            let promotors = [];
+            if (currentUser.role === ROLES.FDV) {
+                promotors = usersData.filter(u => u.role === ROLES.PROMOTOR || u.id === currentUser.uid).map(u => u.name);
+            } else {
+                promotors = [...new Map(usersData.map(user => [user.id, user.name])).values()].filter(Boolean).sort();
+            }
+
             const uniqueCourses = [...new Set(leadsData.map(lead => lead.cursoInteresse).filter(Boolean))].sort();
 
             historyEl.innerHTML = `
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    ${renderStatCard("Total de Leads (Visíveis)", stats.totalLeads, ICONS.USERS, "bg-blue-500")}
+                    ${renderStatCard("Leads Convertidos", stats.convertedLeads, ICONS.CHECK, "bg-green-500")}
+                    ${renderStatCard("Taxa de Conversão", `${stats.conversionRate}%`, ICONS.PERCENT, "bg-purple-500")}
+                    ${renderStatCard("Seus Leads", stats.userLeads, ICONS.USER, "bg-yellow-500")}
+                </div>
+
                 <div class="flex justify-between items-center mb-4">
-                     <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-blue-500 pb-2">Acesso e Histórico</h2>
+                     <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-blue-500 pb-2">Filtros e Histórico</h2>
                      <a href="https://estacio-my.sharepoint.com/:o:/g/personal/marcos_teixeira_estacio_br/EuQ7eSP7m8ZMothtgQfTswEB_48PoRTW4RMo7Jbn8udkzg?e=JLQ370" target="_blank" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">
                          Mensagens para usar
                      </a>
@@ -1033,7 +1222,7 @@
             }
         }
         
-        // --- 6. Bases a Trabalhar ---
+        // --- 7. Bases a Trabalhar ---
         function renderBasesView() {
             const basesEl = document.getElementById('view-bases');
             basesEl.innerHTML = `
@@ -1640,6 +1829,76 @@
                         </table>
                     </div>
                 </div>
+
+                <div id="bom-dia-captacao-management" class="mt-12">
+                    <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-orange-500 pb-2 mb-4">Gerenciamento Bom Dia Captação</h2>
+                    <div class="bg-white p-6 md:p-8 rounded-xl shadow-2xl border border-gray-100 mb-8">
+                        <h3 id="captacao-form-title" class="text-xl font-bold text-gray-800 mb-4">Adicionar/Editar Dados</h3>
+                        <form id="captacao-form" class="space-y-6">
+                            <input type="hidden" id="captacao-id">
+                            ${renderInputField("Título do Card", "captacao-title", "text", true, "Ex: CAPTAÇÃO BU PRESENCIAL 25.1", ICONS.TAG)}
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 border p-4 rounded-lg">
+                                <h4 class="col-span-full font-semibold text-gray-700">Meta Dia</h4>
+                                ${renderInputField("INSC", "meta-insc", "number", true, "0")}
+                                ${renderInputField("MAT FIN", "meta-mat-fin", "number", true, "0")}
+                                ${renderInputField("MAT ACAD", "meta-mat-acad", "number", true, "0")}
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 border p-4 rounded-lg">
+                                <h4 class="col-span-full font-semibold text-gray-700">Ano Anterior</h4>
+                                ${renderInputField("INSC", "anterior-insc", "number", true, "0")}
+                                ${renderInputField("MAT FIN", "anterior-mat-fin", "number", true, "0")}
+                                ${renderInputField("MAT ACAD", "anterior-mat-acad", "number", true, "0")}
+                            </div>
+
+                             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 border p-4 rounded-lg">
+                                <h4 class="col-span-full font-semibold text-gray-700">Real</h4>
+                                ${renderInputField("INSC", "real-insc", "number", true, "0")}
+                                ${renderInputField("MAT FIN", "real-mat-fin", "number", true, "0")}
+                                ${renderInputField("MAT ACAD", "real-mat-acad", "number", true, "0")}
+                            </div>
+                            
+                            <div class="flex space-x-2">
+                                <button type="submit" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded-lg">Salvar Dados</button>
+                                <button type="button" id="btn-clear-captacao-form" class="w-full bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Limpar</button>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="overflow-x-auto bg-white rounded-xl shadow-2xl border border-gray-100">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-100"><tr><th class="p-4 text-left text-xs font-medium text-gray-500 uppercase">Título</th><th class="p-4 text-center text-xs font-medium text-gray-500 uppercase">Ações</th></tr></thead>
+                            <tbody id="captacao-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="forecast-management-section" class="mt-12">
+                    <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-purple-500 pb-2 mb-4">Gerenciamento Forecast da Captação</h2>
+                    <div class="bg-white p-6 md:p-8 rounded-xl shadow-2xl border border-gray-100 mb-8">
+                        <h3 id="forecast-form-title" class="text-xl font-bold text-gray-800 mb-4">Adicionar/Editar Dados do Forecast</h3>
+                        <form id="forecast-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                            <input type="hidden" id="forecast-id">
+                            <div class="lg:col-span-4">
+                                ${renderInputField("Título do Card", "forecast-title", "text", true, "Ex: FORECAST FIN - BU Presencial")}
+                            </div>
+                            ${renderInputField("YTD", "forecast-ytd", "number", true, "0")}
+                            ${renderInputField("Real", "forecast-real", "number", true, "0")}
+                            ${renderInputField("Meta Fechamento", "forecast-meta", "number", true, "0")}
+                            ${renderInputField("Projeção", "forecast-projecao", "number", true, "0")}
+                            <div class="flex space-x-2 lg:col-span-4">
+                                <button type="submit" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg">Salvar</button>
+                                <button type="button" id="btn-clear-forecast-form" class="w-full bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Limpar</button>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="overflow-x-auto bg-white rounded-xl shadow-2xl border border-gray-100">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-100"><tr><th class="p-4 text-left text-xs font-medium text-gray-500 uppercase">Título</th><th class="p-4 text-center text-xs font-medium text-gray-500 uppercase">Ações</th></tr></thead>
+                            <tbody id="forecast-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
                 
                 <h2 class="mt-12 text-3xl font-extrabold text-gray-900 border-b-4 border-red-500 pb-2 mb-4">Configurações do Sistema</h2>
                  <div class="bg-white p-6 md:p-8 rounded-xl shadow-2xl border border-red-200 space-y-4">
@@ -1658,6 +1917,17 @@
             document.getElementById('planner-form').addEventListener('submit', handleSavePlannerTask);
             document.getElementById('btn-clear-planner-form').addEventListener('click', clearPlannerForm);
             document.getElementById('planner-table-body').addEventListener('click', handlePlannerTableActions);
+            
+            renderCaptacaoTable();
+            document.getElementById('captacao-form').addEventListener('submit', handleSaveCaptacao);
+            document.getElementById('btn-clear-captacao-form').addEventListener('click', clearCaptacaoForm);
+            document.getElementById('captacao-table-body').addEventListener('click', handleCaptacaoTableActions);
+
+            renderForecastTable();
+            document.getElementById('forecast-form').addEventListener('submit', handleSaveForecast);
+            document.getElementById('btn-clear-forecast-form').addEventListener('click', clearForecastForm);
+            document.getElementById('forecast-table-body').addEventListener('click', handleForecastTableActions);
+
             document.getElementById('users-table-body').addEventListener('click', (e) => {
                 if (e.target.classList.contains('update-user-btn')) handleUserUpdate(e.target.dataset.uid);
             });
@@ -1769,6 +2039,201 @@
                 showToast('Tarefa excluída!');
             } catch (error) { showToast('Erro ao excluir tarefa.', true); }
         }
+
+        // --- Gerenciamento Bom Dia Captação ---
+        function renderCaptacaoTable() {
+            const tableBody = document.getElementById('captacao-table-body');
+            if (!tableBody) return;
+            const sortedData = [...bomDiaCaptacaoData].sort((a, b) => a.title.localeCompare(b.title));
+
+            if (sortedData.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="2" class="p-4 text-center text-gray-500">Nenhum dado cadastrado.</td></tr>`;
+                return;
+            }
+            tableBody.innerHTML = sortedData.map(item => `
+                <tr data-item-id="${item.id}">
+                    <td class="p-4 font-medium">${item.title}</td>
+                    <td class="p-4 text-center space-x-2">
+                        <button class="edit-captacao-btn text-blue-600 hover:text-blue-800" data-item-id="${item.id}">Editar</button>
+                        <button class="delete-captacao-btn text-red-600 hover:text-red-800" data-item-id="${item.id}">Excluir</button>
+                    </td>
+                </tr>`).join('');
+        }
+
+        function clearCaptacaoForm() {
+            document.getElementById('captacao-form').reset();
+            document.getElementById('captacao-id').value = '';
+            document.getElementById('captacao-form-title').textContent = 'Adicionar/Editar Dados';
+        }
+
+        function handleCaptacaoTableActions(e) {
+            const itemId = e.target.dataset.itemId;
+            if (!itemId) return;
+
+            if (e.target.classList.contains('edit-captacao-btn')) {
+                const item = bomDiaCaptacaoData.find(d => d.id === itemId);
+                if (item) {
+                    document.getElementById('captacao-id').value = item.id;
+                    document.getElementById('captacao-title').value = item.title;
+                    ['meta-insc', 'meta-mat-fin', 'meta-mat-acad'].forEach(id => document.getElementById(id).value = item.metaDia[id.split('-')[1]]);
+                    ['anterior-insc', 'anterior-mat-fin', 'anterior-mat-acad'].forEach(id => document.getElementById(id).value = item.anoAnterior[id.split('-')[1]]);
+                    ['real-insc', 'real-mat-fin', 'real-mat-acad'].forEach(id => document.getElementById(id).value = item.real[id.split('-')[1]]);
+                    document.getElementById('captacao-form-title').textContent = 'Editar Dados';
+                    document.getElementById('bom-dia-captacao-management').scrollIntoView({ behavior: 'smooth' });
+                }
+            } else if (e.target.classList.contains('delete-captacao-btn')) {
+                showConfirm('Tem certeza que deseja excluir este card de dados?', () => {
+                    handleDeleteCaptacao(itemId);
+                });
+            }
+        }
+
+        async function handleSaveCaptacao(e) {
+            e.preventDefault();
+            const itemId = document.getElementById('captacao-id').value;
+            const title = document.getElementById('captacao-title').value;
+
+            const data = {
+                title,
+                metaDia: {
+                    insc: Number(document.getElementById('meta-insc').value) || 0,
+                    matFin: Number(document.getElementById('meta-mat-fin').value) || 0,
+                    matAcad: Number(document.getElementById('meta-mat-acad').value) || 0,
+                },
+                anoAnterior: {
+                    insc: Number(document.getElementById('anterior-insc').value) || 0,
+                    matFin: Number(document.getElementById('anterior-mat-fin').value) || 0,
+                    matAcad: Number(document.getElementById('anterior-mat-acad').value) || 0,
+                },
+                real: {
+                    insc: Number(document.getElementById('real-insc').value) || 0,
+                    matFin: Number(document.getElementById('real-mat-fin').value) || 0,
+                    matAcad: Number(document.getElementById('real-mat-acad').value) || 0,
+                },
+                updatedAt: serverTimestamp(),
+            };
+
+            if (!data.title) {
+                showToast("O título do card é obrigatório.", true);
+                return;
+            }
+
+            try {
+                if (itemId) {
+                    await updateDoc(doc(db, BOM_DIA_CAPTACAO_COLLECTION_PATH, itemId), data);
+                    showToast('Dados atualizados com sucesso!');
+                } else {
+                    await addDoc(collection(db, BOM_DIA_CAPTACAO_COLLECTION_PATH), data);
+                    showToast('Dados adicionados com sucesso!');
+                }
+                clearCaptacaoForm();
+            } catch (error) {
+                console.error("Erro ao salvar dados de captação:", error);
+                showToast('Erro ao salvar os dados.', true);
+            }
+        }
+
+        async function handleDeleteCaptacao(itemId) {
+            try {
+                await deleteDoc(doc(db, BOM_DIA_CAPTACAO_COLLECTION_PATH, itemId));
+                showToast('Dados excluídos com sucesso!');
+            } catch (error) {
+                console.error("Erro ao excluir dados de captação:", error);
+                showToast('Erro ao excluir os dados.', true);
+            }
+        }
+
+        // --- Gerenciamento Forecast Captação ---
+        function renderForecastTable() {
+            const tableBody = document.getElementById('forecast-table-body');
+            if (!tableBody) return;
+            const sortedData = [...forecastData].sort((a, b) => a.title.localeCompare(b.title));
+
+            if (sortedData.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="2" class="p-4 text-center text-gray-500">Nenhum dado cadastrado.</td></tr>`;
+                return;
+            }
+            tableBody.innerHTML = sortedData.map(item => `
+                <tr data-item-id="${item.id}">
+                    <td class="p-4 font-medium">${item.title}</td>
+                    <td class="p-4 text-center space-x-2">
+                        <button class="edit-forecast-btn text-blue-600 hover:text-blue-800" data-item-id="${item.id}">Editar</button>
+                        <button class="delete-forecast-btn text-red-600 hover:text-red-800" data-item-id="${item.id}">Excluir</button>
+                    </td>
+                </tr>`).join('');
+        }
+        
+        function clearForecastForm() {
+            document.getElementById('forecast-form').reset();
+            document.getElementById('forecast-id').value = '';
+            document.getElementById('forecast-form-title').textContent = 'Adicionar/Editar Dados do Forecast';
+        }
+
+        function handleForecastTableActions(e) {
+            const itemId = e.target.dataset.itemId;
+            if (!itemId) return;
+
+            if (e.target.classList.contains('edit-forecast-btn')) {
+                const item = forecastData.find(d => d.id === itemId);
+                if (item) {
+                    document.getElementById('forecast-id').value = item.id;
+                    document.getElementById('forecast-title').value = item.title;
+                    document.getElementById('forecast-ytd').value = item.ytd;
+                    document.getElementById('forecast-real').value = item.real;
+                    document.getElementById('forecast-meta').value = item.meta;
+                    document.getElementById('forecast-projecao').value = item.projecao;
+                    document.getElementById('forecast-form-title').textContent = 'Editar Dados do Forecast';
+                    document.getElementById('forecast-management-section').scrollIntoView({ behavior: 'smooth' });
+                }
+            } else if (e.target.classList.contains('delete-forecast-btn')) {
+                showConfirm('Tem certeza que deseja excluir este card de forecast?', () => {
+                    handleDeleteForecast(itemId);
+                });
+            }
+        }
+
+        async function handleSaveForecast(e) {
+            e.preventDefault();
+            const itemId = document.getElementById('forecast-id').value;
+            const data = {
+                title: document.getElementById('forecast-title').value,
+                ytd: Number(document.getElementById('forecast-ytd').value) || 0,
+                real: Number(document.getElementById('forecast-real').value) || 0,
+                meta: Number(document.getElementById('forecast-meta').value) || 0,
+                projecao: Number(document.getElementById('forecast-projecao').value) || 0,
+                updatedAt: serverTimestamp(),
+            };
+
+            if (!data.title) {
+                showToast("O título do card é obrigatório.", true);
+                return;
+            }
+
+            try {
+                if (itemId) {
+                    await updateDoc(doc(db, FORECAST_CAPTACAO_COLLECTION_PATH, itemId), data);
+                    showToast('Dados do forecast atualizados com sucesso!');
+                } else {
+                    await addDoc(collection(db, FORECAST_CAPTACAO_COLLECTION_PATH), data);
+                    showToast('Dados do forecast adicionados com sucesso!');
+                }
+                clearForecastForm();
+            } catch (error) {
+                console.error("Erro ao salvar dados de forecast:", error);
+                showToast('Erro ao salvar os dados do forecast.', true);
+            }
+        }
+
+        async function handleDeleteForecast(itemId) {
+            try {
+                await deleteDoc(doc(db, FORECAST_CAPTACAO_COLLECTION_PATH, itemId));
+                showToast('Dados de forecast excluídos com sucesso!');
+            } catch (error) {
+                console.error("Erro ao excluir dados de forecast:", error);
+                showToast('Erro ao excluir os dados de forecast.', true);
+            }
+        }
+
 
         async function handleBackup() { /* Logic remains the same */ }
         async function handleRestore() { /* Logic remains the same */ }
