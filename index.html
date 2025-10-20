@@ -747,6 +747,23 @@
                 const projVsMeta = item.meta > 0 ? item.projecao / item.meta : 0;
                 const gap = item.projecao - item.meta;
 
+                let pacingDiario = 0;
+                if(item.dataInicio && item.dataFim) {
+                    const inicio = new Date(item.dataInicio + "T00:00:00");
+                    const fim = new Date(item.dataFim + "T00:00:00");
+                    const hoje = new Date();
+                    hoje.setHours(0, 0, 0, 0);
+
+                    if (hoje <= fim) {
+                        const diasRestantes = Math.ceil((fim - hoje) / (1000 * 60 * 60 * 24)) + 1;
+                        const gapParaMeta = item.meta - item.real;
+                        if(gapParaMeta > 0 && diasRestantes > 0) {
+                            pacingDiario = gapParaMeta / diasRestantes;
+                        }
+                    }
+                }
+
+
                 return `
                 <div class="bg-white p-6 rounded-xl shadow-lg border-t-4 border-purple-500 col-span-1">
                     <h3 class="font-bold text-center text-gray-800 text-lg mb-4">${item.title}</h3>
@@ -779,6 +796,11 @@
                         <div class="flex justify-between items-center bg-gray-50 p-2 rounded">
                             <span class="font-semibold text-gray-600">GAP P/ FECHAMENTO</span>
                             <span class="font-bold ${gapColor(gap)}">${formatGap(gap)}</span>
+                        </div>
+                        <div class="border-t my-2"></div>
+                        <div class="flex justify-between items-center bg-purple-50 p-3 rounded">
+                            <span class="font-semibold text-purple-800">PACING DIÁRIO</span>
+                            <span class="font-bold text-purple-800 text-lg">${pacingDiario.toFixed(1)}</span>
                         </div>
                     </div>
                 </div>
@@ -1877,16 +1899,18 @@
                     <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-purple-500 pb-2 mb-4">Gerenciamento Forecast da Captação</h2>
                     <div class="bg-white p-6 md:p-8 rounded-xl shadow-2xl border border-gray-100 mb-8">
                         <h3 id="forecast-form-title" class="text-xl font-bold text-gray-800 mb-4">Adicionar/Editar Dados do Forecast</h3>
-                        <form id="forecast-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                        <form id="forecast-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
                             <input type="hidden" id="forecast-id">
-                            <div class="lg:col-span-4">
+                            <div class="lg:col-span-3">
                                 ${renderInputField("Título do Card", "forecast-title", "text", true, "Ex: FORECAST FIN - BU Presencial")}
                             </div>
                             ${renderInputField("YTD", "forecast-ytd", "number", true, "0")}
                             ${renderInputField("Real", "forecast-real", "number", true, "0")}
                             ${renderInputField("Meta Fechamento", "forecast-meta", "number", true, "0")}
                             ${renderInputField("Projeção", "forecast-projecao", "number", true, "0")}
-                            <div class="flex space-x-2 lg:col-span-4">
+                            ${renderInputField("Data Início", "forecast-data-inicio", "date", true, "")}
+                            ${renderInputField("Data Fim", "forecast-data-fim", "date", true, "")}
+                            <div class="flex space-x-2 lg:col-span-3">
                                 <button type="submit" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg">Salvar</button>
                                 <button type="button" id="btn-clear-forecast-form" class="w-full bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Limpar</button>
                             </div>
@@ -2182,6 +2206,8 @@
                     document.getElementById('forecast-real').value = item.real;
                     document.getElementById('forecast-meta').value = item.meta;
                     document.getElementById('forecast-projecao').value = item.projecao;
+                    document.getElementById('forecast-data-inicio').value = item.dataInicio || '';
+                    document.getElementById('forecast-data-fim').value = item.dataFim || '';
                     document.getElementById('forecast-form-title').textContent = 'Editar Dados do Forecast';
                     document.getElementById('forecast-management-section').scrollIntoView({ behavior: 'smooth' });
                 }
@@ -2201,11 +2227,13 @@
                 real: Number(document.getElementById('forecast-real').value) || 0,
                 meta: Number(document.getElementById('forecast-meta').value) || 0,
                 projecao: Number(document.getElementById('forecast-projecao').value) || 0,
+                dataInicio: document.getElementById('forecast-data-inicio').value,
+                dataFim: document.getElementById('forecast-data-fim').value,
                 updatedAt: serverTimestamp(),
             };
 
-            if (!data.title) {
-                showToast("O título do card é obrigatório.", true);
+            if (!data.title || !data.dataInicio || !data.dataFim) {
+                showToast("Título, Data Início e Data Fim são obrigatórios.", true);
                 return;
             }
 
