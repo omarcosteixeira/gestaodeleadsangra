@@ -4,10 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestão de Leads Angra</title>
-    <!-- Tailwind CSS CDN para estilos responsivos e modernos -->
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- SheetJS (xlsx) CDN para manipulação de arquivos Excel -->
+    <!-- SheetJS (xlsx) CDN -->
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <!-- html2canvas CDN for image generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <!-- Google Fonts: Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -78,6 +80,7 @@
                 <div id="view-cadastro" class="view-content space-y-8 hidden"></div>
                 <div id="view-historico" class="view-content space-y-8 hidden"></div>
                 <div id="view-bases" class="view-content space-y-8 hidden"></div>
+                <div id="view-controle-bases" class="view-content space-y-8 hidden"></div>
                 <div id="view-gap" class="view-content space-y-8 hidden"></div>
                 <div id="view-admin" class="view-content space-y-8 hidden"></div>
             </div>
@@ -178,6 +181,7 @@
         const BASES_COLLECTION_PATH = `artifacts/${appId}/public/data/bases`;
         const BOM_DIA_CAPTACAO_COLLECTION_PATH = `artifacts/${appId}/public/data/bomDiaCaptacao`;
         const FORECAST_CAPTACAO_COLLECTION_PATH = `artifacts/${appId}/public/data/forecastCaptacao`;
+        const CONTROLE_BASES_COLLECTION_PATH = `artifacts/${appId}/public/data/controleBases`;
 
         let db;
         let auth;
@@ -189,6 +193,7 @@
         let basesData = [];
         let bomDiaCaptacaoData = [];
         let forecastData = [];
+        let controleBasesData = [];
         let currentView = 'cadastro';
         let isAuthReady = false;
         let unsubscribeLeads = () => {};
@@ -198,10 +203,12 @@
         let unsubscribeBases = () => {};
         let unsubscribeBomDiaCaptacao = () => {};
         let unsubscribeForecastCaptacao = () => {};
+        let unsubscribeControleBases = () => {};
         
         let leadFilterState = { acao: '', dia: '', promotorId: '', converted: 'all', telefone: '', curso: '' };
         let gapFilterState = { nome: '', cpf: '', matAcad: 'all', gap: 'all', produto: '', curso: '', semestre: '', metodologia: '', formaIngresso: '' };
         let baseFilterState = { nome: '', cpf: '', produto: '', curso: '', nomeBase: '', status: 'all' };
+        let controleBasesFilterState = { period: 'this_month', atendenteId: 'all', meioDisparo: 'all' };
 
         // --- Configuração de Perfis e Permissões ---
         const ROLES = { 
@@ -217,6 +224,7 @@
             'cadastro':  [ROLES.PROMOTOR, ROLES.FDV, ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV], 
             'historico': [ROLES.FDV, ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV], 
             'bases':     [ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV],
+            'controle-bases': [ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV],
             'gap':       [ROLES.SALA_MATRICULA, ROLES.LIDER_FDV],
             'admin':     [ROLES.LIDER_FDV] 
         };
@@ -246,6 +254,7 @@
             ACADEMIC: generateIcon('<path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3.33 1.67 6.67 1.67 10 0v-5"/>'),
             DATABASE: generateIcon('<ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>'),
             BOOKMARK: generateIcon('<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>'),
+            CLOSE: generateIcon('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'),
         };
         
         // --- UI Helpers ---
@@ -319,6 +328,7 @@
                 case 'cadastro': renderRegistration(); break;
                 case 'historico': renderHistory(); break;
                 case 'bases': renderBasesView(); break;
+                case 'controle-bases': renderControleBasesView(); break;
                 case 'gap': renderGapView(); break;
                 case 'admin': renderAdminPanel(); break;
             }
@@ -332,6 +342,7 @@
                 { view: 'cadastro', label: 'Leads', icon: ICONS.USER },
                 { view: 'historico', label: 'Histórico', icon: ICONS.LIST },
                 { view: 'bases', label: 'Bases', icon: ICONS.DATABASE },
+                { view: 'controle-bases', label: 'Controle', icon: ICONS.BOOKMARK },
                 { view: 'gap', label: 'GAP', icon: ICONS.ACADEMIC },
                 { view: 'admin', label: 'Gerenciar', icon: ICONS.USERS }
             ];
@@ -432,6 +443,7 @@
             plannerData = [];
             bomDiaCaptacaoData = [];
             forecastData = [];
+            controleBasesData = [];
             unsubscribeLeads();
             unsubscribeUsers();
             unsubscribeGap();
@@ -439,6 +451,7 @@
             unsubscribeBases();
             unsubscribeBomDiaCaptacao();
             unsubscribeForecastCaptacao();
+            unsubscribeControleBases();
             document.getElementById('app-container').classList.add('hidden');
             document.getElementById('auth-screen').classList.remove('hidden');
             renderAuthScreen(true);
@@ -552,7 +565,7 @@
                             <span class="text-xs bg-blue-500 px-2 py-0.5 rounded-full">${currentUser.role}</span>
                         </div>`;
                 }
-                if (['admin', 'historico', 'cadastro'].includes(currentView)) renderView(currentView);
+                if (['admin', 'historico', 'cadastro', 'controle-bases'].includes(currentView)) renderView(currentView);
             }, (error) => console.error("Erro ao ouvir utilizadores:", error));
 
             let leadsQuery;
@@ -585,6 +598,14 @@
                     basesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     if (currentView === 'bases') renderView('bases');
                 }, (error) => console.error("Erro ao ouvir bases:", error));
+            }
+            
+            if (canView('controle-bases')) {
+                const controleBasesQuery = query(collection(db, CONTROLE_BASES_COLLECTION_PATH));
+                unsubscribeControleBases = onSnapshot(controleBasesQuery, (snapshot) => {
+                    controleBasesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    if (currentView === 'controle-bases') renderView('controle-bases');
+                }, (error) => console.error("Erro ao ouvir controle de bases:", error));
             }
 
             if (canView('gap')) {
@@ -643,6 +664,18 @@
                     </div>
                 </div>
             `;
+
+             // Event listener for share buttons
+            const captacaoContainer = document.getElementById('bom-dia-captacao-container');
+            if (captacaoContainer) {
+                captacaoContainer.addEventListener('click', (e) => {
+                    const shareButton = e.target.closest('.share-captacao-btn');
+                    if (shareButton) {
+                        const cardId = shareButton.dataset.cardId;
+                        handleShareCaptacao(cardId);
+                    }
+                });
+            }
         }
         
         function renderBomDiaCaptacaoCards() {
@@ -670,7 +703,7 @@
                 const matAcad = calculateMetrics(item.real.matAcad, item.metaDia.matAcad, item.anoAnterior.matAcad);
 
                 return `
-                <div class="bg-white p-4 rounded-xl shadow-lg border-t-4 border-blue-500 col-span-1">
+                <div class="bg-white p-4 rounded-xl shadow-lg border-t-4 border-blue-500 col-span-1" id="captacao-card-${item.id}">
                     <h3 class="font-bold text-center text-gray-800 mb-4">${item.title}</h3>
                     <table class="w-full text-sm text-center">
                         <thead class="bg-gray-50">
@@ -726,10 +759,40 @@
                             </tr>
                         </tbody>
                     </table>
+                     <div class="mt-4 pt-4 border-t border-gray-200 text-center">
+                        <button data-card-id="${item.id}" class="share-captacao-btn bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center w-full">
+                            <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 16 16"><path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.557 6.557 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654s.71 1.916.81 2.049c.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z"/></svg>
+                            <span>Compartilhar</span>
+                        </button>
+                    </div>
                 </div>
                 `;
             }).join('');
         }
+
+        async function handleShareCaptacao(cardId) {
+            const cardElement = document.getElementById(`captacao-card-${cardId}`);
+            if (!cardElement) {
+                showToast('Erro ao encontrar o card para compartilhar.', true);
+                return;
+            }
+
+            showToast('Gerando imagem para compartilhar...');
+
+            try {
+                const canvas = await html2canvas(cardElement, { useCORS: true, scale: 2 });
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+                
+                const newWindow = window.open();
+                newWindow.document.write(`<img src="${dataUrl}" alt="Dashboard Image" style="width:100%;">`);
+                showToast('Imagem pronta! Salve e compartilhe no WhatsApp.', false);
+
+            } catch (error) {
+                console.error('Erro ao gerar imagem:', error);
+                showToast('Ocorreu um erro ao gerar a imagem.', true);
+            }
+        }
+
 
         function renderForecastCaptacaoCards() {
             if (!forecastData || forecastData.length === 0) {
@@ -754,7 +817,7 @@
                     const hoje = new Date();
                     hoje.setHours(0, 0, 0, 0);
 
-                    if (hoje <= fim) {
+                    if (hoje <= fim && hoje >= inicio) {
                         const diasRestantes = Math.ceil((fim - hoje) / (1000 * 60 * 60 * 24)) + 1;
                         const gapParaMeta = item.meta - item.real;
                         if(gapParaMeta > 0 && diasRestantes > 0) {
@@ -1582,7 +1645,267 @@
             }
         }
         
-        // --- 8. GAP Acadêmico ---
+        // --- 8. Controle das Bases ---
+        function renderControleBasesView() {
+            const el = document.getElementById('view-controle-bases');
+            el.innerHTML = `
+                <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-teal-500 pb-2 mb-8">Controle das Bases</h2>
+                
+                <div id="controle-bases-reports-container" class="mb-8"></div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                    <div>
+                         <h3 class="text-xl font-bold text-gray-800 mb-2">Novo Registro</h3>
+                        <div id="controle-bases-registration-container" class="bg-white p-6 rounded-xl shadow-lg border"></div>
+                    </div>
+                    <div>
+                         <h3 class="text-xl font-bold text-gray-800 mb-2">Histórico de Registros</h3>
+                        <div id="controle-bases-table-container" class="bg-white rounded-xl shadow-lg border"></div>
+                    </div>
+                </div>
+            `;
+            renderControleBasesReports();
+            renderControleBasesRegistrationForm();
+            renderControleBasesTable();
+        }
+        
+        function renderControleBasesReports() {
+            const container = document.getElementById('controle-bases-reports-container');
+            const atendentes = usersData.filter(u => u.role === ROLES.SALA_MATRICULA || u.role === ROLES.QG || u.role === ROLES.LIDER_FDV);
+
+            container.innerHTML = `
+                <div class="bg-white p-6 rounded-xl shadow-lg border mb-8">
+                     <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4" id="controle-bases-filter-form">
+                        <div>
+                            <label for="controle-period" class="block text-sm font-medium text-gray-700">Período</label>
+                            <select id="controle-period" name="period" class="mt-1 block w-full rounded-lg border-gray-300 p-2 border">
+                                <option value="today">Hoje</option>
+                                <option value="this_week">Esta Semana</option>
+                                <option value="this_month" selected>Este Mês</option>
+                                <option value="this_year">Este Ano</option>
+                            </select>
+                        </div>
+                         <div>
+                            <label for="controle-atendente" class="block text-sm font-medium text-gray-700">Atendente</label>
+                            <select id="controle-atendente" name="atendenteId" class="mt-1 block w-full rounded-lg border-gray-300 p-2 border">
+                                <option value="all">Todos</option>
+                                ${atendentes.map(u => `<option value="${u.id}">${u.name}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label for="controle-meio" class="block text-sm font-medium text-gray-700">Meio de Disparo</label>
+                            <select id="controle-meio" name="meioDisparo" class="mt-1 block w-full rounded-lg border-gray-300 p-2 border">
+                                <option value="all">Todos</option>
+                                <option>Email</option>
+                                <option>WhatsApp</option>
+                                <option>Telefone</option>
+                                <option>SMS</option>
+                            </select>
+                        </div>
+                     </div>
+                </div>
+                <div id="controle-bases-stats-container" class="grid grid-cols-1 sm:grid-cols-3 gap-6"></div>
+            `;
+            
+            const form = document.getElementById('controle-bases-filter-form');
+            form.addEventListener('change', e => {
+                controleBasesFilterState[e.target.name] = e.target.value;
+                updateControleBasesStats();
+            });
+            
+            updateControleBasesStats();
+        }
+
+        function updateControleBasesStats() {
+            const container = document.getElementById('controle-bases-stats-container');
+            const filteredData = filterControleBasesData();
+            const stats = {
+                disparos: filteredData.reduce((sum, item) => sum + item.disparos, 0),
+                positivos: filteredData.reduce((sum, item) => sum + item.positivos, 0),
+                negativos: filteredData.reduce((sum, item) => sum + item.negativos, 0),
+            };
+
+            container.innerHTML = `
+                ${renderStatCard("Total Disparos", stats.disparos, ICONS.DATABASE, "bg-teal-500")}
+                ${renderStatCard("Positivos", stats.positivos, ICONS.CHECK, "bg-green-500")}
+                ${renderStatCard("Negativos", stats.negativos, ICONS.CLOSE, "bg-red-500")}
+            `;
+        }
+
+        function filterControleBasesData() {
+            const now = new Date();
+            const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1)));
+            startOfWeek.setHours(0,0,0,0);
+            
+            const matchesPeriod = (entryDate, period) => {
+                if (!entryDate) return false;
+                const date = entryDate.toDate();
+                const today = new Date();
+                today.setHours(0,0,0,0);
+
+                switch(period) {
+                    case 'today':
+                        return date.toDateString() === today.toDateString();
+                    case 'this_week':
+                        const endOfWeek = new Date(startOfWeek);
+                        endOfWeek.setDate(startOfWeek.getDate() + 6);
+                        endOfWeek.setHours(23,59,59,999);
+                        return date >= startOfWeek && date <= endOfWeek;
+                    case 'this_month':
+                        return date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
+                    case 'this_year':
+                        return date.getFullYear() === today.getFullYear();
+                    default:
+                        return true;
+                }
+            };
+
+            return controleBasesData.filter(item => {
+                const periodMatch = matchesPeriod(item.dataEntrada, controleBasesFilterState.period);
+                const atendenteMatch = controleBasesFilterState.atendenteId === 'all' || item.atendenteId === controleBasesFilterState.atendenteId;
+                const meioMatch = controleBasesFilterState.meioDisparo === 'all' || item.meioDisparo === controleBasesFilterState.meioDisparo;
+                return periodMatch && atendenteMatch && meioMatch;
+            });
+        }
+        
+        function renderControleBasesRegistrationForm() {
+            const container = document.getElementById('controle-bases-registration-container');
+            const meios = ['Email', 'WhatsApp', 'Telefone', 'SMS'];
+            const atendentes = usersData.filter(u => u.role === ROLES.SALA_MATRICULA || u.role === ROLES.QG || u.role === ROLES.LIDER_FDV);
+            container.innerHTML = `
+                 <div id="controle-base-message" class="hidden mb-4 p-3 rounded-lg text-center font-medium"></div>
+                 <form id="controle-base-form" class="space-y-4">
+                    <input type="hidden" id="controle-base-id">
+                    ${renderInputField("Nome da Base", "controle-nomeBase", "text", true, "", ICONS.DATABASE)}
+                    <div id="atendente-select-wrapper">
+                        ${renderSelectField("Atendente", "controle-atendenteId", atendentes.map(u => u.name), true, ICONS.USER)}
+                    </div>
+                    ${renderSelectField("Meio de Disparo", "controle-meioDisparo", meios, true, ICONS.MAIL)}
+                    ${renderInputField("Quantidade de Disparos", "controle-disparos", "number", true, "0")}
+                    ${renderInputField("Quantos Positivos", "controle-positivos", "number", true, "0")}
+                    ${renderInputField("Quantos Negativos", "controle-negativos", "number", true, "0")}
+                    <button type="submit" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-4 rounded-lg">Salvar Registro</button>
+                    <button type="button" id="btn-clear-controle-form" class="w-full bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Limpar</button>
+                 </form>
+            `;
+            
+            // Populate select with id as value
+            const select = container.querySelector('#controle-atendenteId');
+            select.innerHTML = `<option value="">-- Selecione --</option>` + atendentes.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
+
+
+            document.getElementById('controle-base-form').addEventListener('submit', handleSaveControleBase);
+            document.getElementById('btn-clear-controle-form').addEventListener('click', () => {
+                const form = document.getElementById('controle-base-form');
+                form.reset();
+                form['controle-base-id'].value = '';
+            });
+        }
+
+        async function handleSaveControleBase(e) {
+            e.preventDefault();
+            const form = e.target;
+            const msgEl = document.getElementById('controle-base-message');
+            const id = form['controle-base-id'].value;
+            const atendenteId = form['controle-atendenteId'].value;
+            const atendente = usersData.find(u => u.id === atendenteId);
+
+
+            const entry = {
+                nomeBase: form['controle-nomeBase'].value,
+                atendenteId: atendenteId,
+                atendenteName: atendente ? atendente.name : 'Desconhecido',
+                meioDisparo: form['controle-meioDisparo'].value,
+                disparos: Number(form['controle-disparos'].value) || 0,
+                positivos: Number(form['controle-positivos'].value) || 0,
+                negativos: Number(form['controle-negativos'].value) || 0,
+                dataEntrada: serverTimestamp(),
+            };
+
+            if(!entry.nomeBase || !entry.meioDisparo || !entry.atendenteId) {
+                showMessage(msgEl, 'Preencha os campos obrigatórios.', true);
+                return;
+            }
+
+            try {
+                if (id) {
+                    delete entry.dataEntrada; // Do not update creation date on edit
+                    await updateDoc(doc(db, CONTROLE_BASES_COLLECTION_PATH, id), entry);
+                    showToast('Registro atualizado!');
+                } else {
+                    await addDoc(collection(db, CONTROLE_BASES_COLLECTION_PATH), entry);
+                    showMessage(msgEl, 'Registro salvo!', false);
+                }
+                form.reset();
+                form['controle-base-id'].value = '';
+            } catch(error) {
+                console.error("Erro ao salvar controle de base:", error);
+                showMessage(msgEl, 'Erro ao salvar o registro.', true);
+            }
+        }
+
+        function renderControleBasesTable() {
+            const container = document.getElementById('controle-bases-table-container');
+            const data = [...controleBasesData].sort((a,b) => (b.dataEntrada?.seconds || 0) - (a.dataEntrada?.seconds || 0));
+
+            let tableHTML = `<div class="overflow-y-auto max-h-96"><table class="w-full text-sm text-left text-gray-500">
+                <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+                    <tr><th class="px-4 py-2">Data</th><th class="px-4 py-2">Base</th><th class="px-4 py-2">Atendente</th><th class="px-4 py-2">Ações</th></tr>
+                </thead><tbody>`;
+
+            if (data.length === 0) {
+                tableHTML += `<tr><td colspan="4" class="p-4 text-center">Nenhum registro.</td></tr>`;
+            } else {
+                data.forEach(item => {
+                    tableHTML += `<tr class="bg-white border-b">
+                        <td class="px-4 py-2">${formatDate(item.dataEntrada)}</td>
+                        <td class="px-4 py-2 font-medium">${item.nomeBase}</td>
+                        <td class="px-4 py-2">${item.atendenteName}</td>
+                        <td class="px-4 py-2 space-x-2">
+                            <button class="edit-controle-btn text-blue-600" data-id="${item.id}">Editar</button>
+                            <button class="delete-controle-btn text-red-600" data-id="${item.id}">Excluir</button>
+                        </td>
+                    </tr>`;
+                });
+            }
+            tableHTML += '</tbody></table></div>';
+            container.innerHTML = tableHTML;
+            container.addEventListener('click', handleControleBasesTableActions);
+        }
+        
+        function handleControleBasesTableActions(e) {
+            const id = e.target.dataset.id;
+            if(!id) return;
+
+            if(e.target.classList.contains('edit-controle-btn')) {
+                const item = controleBasesData.find(d => d.id === id);
+                if(item) {
+                    const form = document.getElementById('controle-base-form');
+                    form['controle-base-id'].value = item.id;
+                    form['controle-nomeBase'].value = item.nomeBase;
+                    form['controle-atendenteId'].value = item.atendenteId;
+                    form['controle-meioDisparo'].value = item.meioDisparo;
+                    form['controle-disparos'].value = item.disparos;
+                    form['controle-positivos'].value = item.positivos;
+                    form['controle-negativos'].value = item.negativos;
+                }
+            } else if (e.target.classList.contains('delete-controle-btn')) {
+                 showConfirm('Tem certeza que deseja excluir este registro?', () => {
+                    handleDeleteControleBase(id);
+                });
+            }
+        }
+
+        async function handleDeleteControleBase(id) {
+            try {
+                await deleteDoc(doc(db, CONTROLE_BASES_COLLECTION_PATH, id));
+                showToast('Registro excluído!');
+            } catch(error) {
+                showToast('Erro ao excluir registro.', true);
+            }
+        }
+        
+        // --- 9. GAP Acadêmico ---
         function renderGapView() {
             const gapEl = document.getElementById('view-gap');
             gapEl.innerHTML = `
@@ -1792,7 +2115,7 @@
             }
         }
 
-        // --- 9. Painel de Administração ---
+        // --- 10. Painel de Administração ---
         function renderAdminPanel() {
             const adminEl = document.getElementById('view-admin');
             const attendants = usersData.map(u => ({ id: u.id, name: u.name })).sort((a, b) => a.name.localeCompare(b.name));
