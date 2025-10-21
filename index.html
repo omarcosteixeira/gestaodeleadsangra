@@ -237,6 +237,20 @@
             const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
             return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
         };
+
+        function calculateWeekdays(startDate, endDate) {
+            let count = 0;
+            const currentDate = new Date(startDate.getTime());
+            while (currentDate <= endDate) {
+                const dayOfWeek = currentDate.getDay();
+                if (dayOfWeek !== 0 && dayOfWeek !== 6) { // 0 = Sunday, 6 = Saturday
+                    count++;
+                }
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+            return count;
+        }
+
         const generateIcon = (svgPath) => `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 inline-block" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${svgPath}</svg>`;
         const ICONS = {
             USERS: generateIcon('<path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/>'),
@@ -808,7 +822,7 @@
             return forecastData.sort((a,b) => a.title.localeCompare(b.title)).map(item => {
                 const realVsYtd = item.ytd > 0 ? item.real / item.ytd : 0;
                 const projVsMeta = item.meta > 0 ? item.projecao / item.meta : 0;
-                const gap = item.projecao - item.meta;
+                const gap = item.real - item.projecao;
 
                 let pacingDiario = 0;
                 if(item.dataInicio && item.dataFim) {
@@ -818,7 +832,7 @@
                     hoje.setHours(0, 0, 0, 0);
 
                     if (hoje <= fim && hoje >= inicio) {
-                        const diasRestantes = Math.ceil((fim - hoje) / (1000 * 60 * 60 * 24)) + 1;
+                        const diasRestantes = calculateWeekdays(hoje, fim);
                         const gapParaMeta = item.meta - item.real;
                         if(gapParaMeta > 0 && diasRestantes > 0) {
                             pacingDiario = gapParaMeta / diasRestantes;
