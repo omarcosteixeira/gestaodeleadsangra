@@ -825,18 +825,22 @@
                 const gap = item.real - item.projecao;
 
                 let pacingDiario = 0;
+                let diasRestantesDisplay = 'N/A';
                 if(item.dataInicio && item.dataFim) {
                     const inicio = new Date(item.dataInicio + "T00:00:00");
                     const fim = new Date(item.dataFim + "T00:00:00");
                     const hoje = new Date();
                     hoje.setHours(0, 0, 0, 0);
 
-                    if (hoje <= fim && hoje >= inicio) {
-                        const diasRestantes = calculateWeekdays(hoje, fim);
+                    if (hoje <= fim) {
+                        const diasUteisRestantes = calculateWeekdays(hoje, fim);
+                        diasRestantesDisplay = diasUteisRestantes;
                         const gapParaMeta = item.meta - item.real;
-                        if(gapParaMeta > 0 && diasRestantes > 0) {
-                            pacingDiario = gapParaMeta / diasRestantes;
+                        if(gapParaMeta > 0 && diasUteisRestantes > 0) {
+                            pacingDiario = gapParaMeta / diasUteisRestantes;
                         }
+                    } else {
+                         diasRestantesDisplay = 0;
                     }
                 }
 
@@ -875,6 +879,10 @@
                             <span class="font-bold ${gapColor(gap)}">${formatGap(gap)}</span>
                         </div>
                         <div class="border-t my-2"></div>
+                        <div class="flex justify-between items-center bg-purple-50 p-2 rounded">
+                            <span class="font-semibold text-purple-800">Dias Úteis Restantes</span>
+                            <span class="font-bold text-purple-800 text-lg">${diasRestantesDisplay}</span>
+                        </div>
                         <div class="flex justify-between items-center bg-purple-50 p-3 rounded">
                             <span class="font-semibold text-purple-800">PACING DIÁRIO</span>
                             <span class="font-bold text-purple-800 text-lg">${pacingDiario.toFixed(1)}</span>
