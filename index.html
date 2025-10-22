@@ -2082,7 +2082,7 @@
             const form = document.getElementById('gap-filter-form');
             form.addEventListener('input', e => handleGapFilterChange(e.target.name, e.target.value));
             document.getElementById('btn-clear-gap-filters').addEventListener('click', () => {
-                gapFilterState = { nome: '', cpf: '' };
+                gapFilterState = { nome: '', cpf: '', matAcad: 'all', gap: 'all', produto: '', curso: '', semestre: '', metodologia: '', formaIngresso: '' };
                 renderGapView();
             });
         }
