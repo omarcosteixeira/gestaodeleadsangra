@@ -1232,9 +1232,20 @@
         }
 
         function renderFilterSelect(label, name, options, currentValue, iconHTML) { 
-            const isAll = currentValue === 'all';
+            const isAll = currentValue === 'all' || currentValue === '';
             return `<div><label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">${iconHTML.replace('h-5 w-5','h-4 w-4').replace('mr-2 inline-block','mr-1 text-blue-500')} ${label}</label><select id="${name}" name="${name}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border"><option value="all" ${isAll ? 'selected' : ''}>-- Todos --</option>${options.map(opt => `<option value="${opt}" ${opt === currentValue ? 'selected' : ''}>${opt}</option>`).join('')}</select></div>`; 
         }
+        
+        // NOVO: Helper para filtros com valor e texto diferentes (ex: Sim/Não)
+        function renderFilterSelectCustom(label, name, options, currentValue, iconHTML) {
+            const isAll = currentValue === 'all' || currentValue === '';
+             return `<div><label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">${iconHTML.replace('h-5 w-5','h-4 w-4').replace('mr-2 inline-block','mr-1 text-blue-500')} ${label}</label>
+             <select id="${name}" name="${name}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border">
+                <option value="all" ${isAll ? 'selected' : ''}>-- Todos --</option>
+                ${options.map(opt => `<option value="${opt.value}" ${opt.value === currentValue ? 'selected' : ''}>${opt.label}</option>`).join('')}
+             </select></div>`;
+        }
+
         function renderFilterDate(label, name, currentValue, iconHTML) { 
             return `<div><label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">${iconHTML.replace('h-5 w-5','h-4 w-4').replace('mr-2 inline-block','mr-1 text-blue-500')} ${label}</label><input type="date" name="${name}" id="${name}" value="${currentValue}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border"/></div>`; 
         }
@@ -2071,16 +2082,19 @@
              const container = document.getElementById('gap-filters-container');
              const unique = (key) => [...new Set(gapData.map(item => item[key]).filter(Boolean))].sort();
              container.innerHTML = `
-                <div class="bg-white p-6 rounded-xl shadow-lg grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 border" id="gap-filter-form">
+                <div class="bg-white p-6 rounded-xl shadow-lg grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 border" id="gap-filter-form">
                     ${renderFilterInput("Nome", "nome", gapFilterState.nome, ICONS.USER, "Buscar...")}
                     ${renderFilterInput("CPF", "cpf", gapFilterState.cpf, ICONS.HASH, "Buscar...")}
                     ${renderFilterSelect("Produto", "produto", unique('produto'), gapFilterState.produto, ICONS.ACADEMIC)}
                     ${renderFilterSelect("Curso", "curso", unique('curso'), gapFilterState.curso, ICONS.LIST)}
-                    <div class='flex items-end'><button id="btn-clear-gap-filters" class="w-full bg-red-500 text-white font-medium py-2 px-4 rounded-lg">Limpar</button></div>
+                    ${renderFilterSelectCustom("Mat. Acadêmica", "matAcad", [{value: 'true', label: 'Sim'}, {value: 'false', label: 'Não'}], gapFilterState.matAcad, ICONS.CHECK)}
+                    ${renderFilterSelectCustom("GAP", "gap", [{value: 'true', label: 'Sim (Em GAP)'}, {value: 'false', label: 'Não (Resolvido)'}], gapFilterState.gap, ICONS.CLOSE)}
+                    <div class='flex items-end col-span-1 sm:col-span-2 md:col-span-3 lg:col-span-4'><button id="btn-clear-gap-filters" class="w-full bg-red-500 text-white font-medium py-2 px-4 rounded-lg">Limpar</button></div>
                 </div>`;
             
             const form = document.getElementById('gap-filter-form');
             form.addEventListener('input', e => handleGapFilterChange(e.target.name, e.target.value));
+            form.addEventListener('change', e => handleGapFilterChange(e.target.name, e.target.value)); // Adicionado para selects
             document.getElementById('btn-clear-gap-filters').addEventListener('click', () => {
                 // CORREÇÃO: Resetar o estado completo
                 gapFilterState = { nome: '', cpf: '', matAcad: 'all', gap: 'all', produto: '', curso: '', semestre: '', metodologia: '', formaIngresso: '' };
@@ -2100,13 +2114,17 @@
                 const cpfMatch = gapFilterState.cpf ? item.cpf.includes(gapFilterState.cpf) : true;
                 const productMatch = gapFilterState.produto ? item.produto === gapFilterState.produto : true;
                 const courseMatch = gapFilterState.curso ? item.curso === gapFilterState.curso : true;
-                const semestreMatch = gapFilterState.semestre ? item.semestre === gapFilterState.semestre : true;
-                const metodologiaMatch = gapFilterState.metodologia ? item.metodologia === gapFilterState.metodologia : true;
-                const formaIngressoMatch = gapFilterState.formaIngresso ? item.formaIngresso === gapFilterState.formaIngresso : true;
-                const matAcadMatch = gapFilterState.matAcad !== 'all' ? String(item.matAcad) === gapFilterState.matAcad : true;
-                const gapMatch = gapFilterState.gap === 'true' ? !item.matAcad : true;
+                
+                const matAcadMatch = gapFilterState.matAcad === 'all' ? true : String(item.matAcad || false) === gapFilterState.matAcad;
+                
+                let gapMatch = true;
+                if (gapFilterState.gap === 'true') {
+                    gapMatch = !item.matAcad;
+                } else if (gapFilterState.gap === 'false') {
+                    gapMatch = item.matAcad === true;
+                }
 
-                return nameMatch && cpfMatch && productMatch && courseMatch && semestreMatch && metodologiaMatch && formaIngressoMatch && matAcadMatch && gapMatch;
+                return nameMatch && cpfMatch && productMatch && courseMatch && matAcadMatch && gapMatch;
             }).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
         }
 
@@ -2661,5 +2679,4 @@
     </script>
 </body>
 </html>
-
 
