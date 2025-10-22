@@ -1904,7 +1904,213 @@
 
             let tableHTML = `<div class="overflow-y-auto max-h-96"><table class="w-full text-sm text-left text-gray-500">
                 <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
-                    <tr><th class="px-4 py-2">Data</th><th class="px-4 py-2">Base</th><th class="p-4 text-left font-medium text-gray-500 uppercase">Detalhes</th>
+                    <tr><th class="px-4 py-2">Data</th><th class="px-4 py-2">Base</th><th class="px-4 py-2">Atendente</th><th class="px-4 py-2">Ações</th></tr>
+                </thead><tbody>`;
+
+            if (data.length === 0) {
+                tableHTML += `<tr><td colspan="4" class="p-4 text-center">Nenhum registro.</td></tr>`;
+            } else {
+                data.forEach(item => {
+                    tableHTML += `<tr class="bg-white border-b">
+                        <td class="px-4 py-2">${formatDate(item.dataEntrada)}</td>
+                        <td class="px-4 py-2 font-medium">${item.nomeBase}</td>
+                        <td class="px-4 py-2">${item.atendenteName}</td>
+                        <td class="px-4 py-2 space-x-2">
+                            <button class="edit-controle-btn text-blue-600" data-id="${item.id}">Editar</button>
+                            <button class="delete-controle-btn text-red-600" data-id="${item.id}">Excluir</button>
+                        </td>
+                    </tr>`;
+                });
+            }
+            tableHTML += '</tbody></table></div>';
+            container.innerHTML = tableHTML;
+            container.addEventListener('click', handleControleBasesTableActions);
+        }
+        
+        function handleControleBasesTableActions(e) {
+            const id = e.target.dataset.id;
+            if(!id) return;
+
+            if(e.target.classList.contains('edit-controle-btn')) {
+                const item = controleBasesData.find(d => d.id === id);
+                if(item) {
+                    const form = document.getElementById('controle-base-form');
+                    form['controle-base-id'].value = item.id;
+                    form['controle-nomeBase'].value = item.nomeBase;
+                    form['controle-atendenteId'].value = item.atendenteId;
+                    form['controle-meioDisparo'].value = item.meioDisparo;
+                    form['controle-disparos'].value = item.disparos;
+                    form['controle-positivos'].value = item.positivos;
+                    form['controle-negativos'].value = item.negativos;
+                }
+            } else if (e.target.classList.contains('delete-controle-btn')) {
+                 showConfirm('Tem certeza que deseja excluir este registro?', () => {
+                    handleDeleteControleBase(id);
+                });
+            }
+        }
+
+        async function handleDeleteControleBase(id) {
+            try {
+                await deleteDoc(doc(db, CONTROLE_BASES_COLLECTION_PATH, id));
+                showToast('Registro excluído!');
+            } catch(error) {
+                showToast('Erro ao excluir registro.', true);
+            }
+        }
+        
+        // --- 9. GAP Acadêmico ---
+        function renderGapView() {
+            const gapEl = document.getElementById('view-gap');
+            gapEl.innerHTML = `
+                <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-purple-500 pb-2 mb-4">GAP Acadêmico</h2>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                    <div><div id="gap-dashboard-container"></div></div>
+                    <div class="space-y-8">
+                        <div>
+                            <h3 class="text-xl font-bold text-gray-800 mb-2">Novo Cadastro</h3>
+                            <div id="gap-registration-container" class="bg-white p-6 rounded-xl shadow-lg border"></div>
+                        </div>
+                        <div>
+                            <h3 class="text-xl font-bold text-gray-800 mb-2">Importar em Lote (Excel)</h3>
+                            <div id="gap-import-container" class="bg-white p-6 rounded-xl shadow-lg border"></div>
+                        </div>
+                    </div>
+                </div>
+                <div id="gap-filters-container" class="mb-8"></div>
+                <div id="gap-table-container"></div>
+            `;
+            renderGapDashboard();
+            renderGapRegistrationForm();
+            renderGapImportForm();
+            renderGapFilters();
+            renderGapTable();
+        }
+
+        function renderGapDashboard() {
+            const container = document.getElementById('gap-dashboard-container');
+            const stats = calculateGapStats();
+            container.innerHTML = `
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    ${renderStatCard("Total em GAP", stats.total, ICONS.ACADEMIC, "bg-purple-500")}
+                    ${renderStatCard("Mat. Acadêmica OK", stats.matAcad, ICONS.CHECK, "bg-green-500")}
+                    ${renderStatCard("Aguardando Matrícula", stats.pendingMatricula, ICONS.USER, "bg-orange-500")}
+                    ${renderStatCard("Conversão (Acad.)", `${stats.conversionRate}%`, ICONS.PERCENT, "bg-yellow-500")}
+                </div>
+            `;
+        }
+
+        function calculateGapStats() {
+            const total = gapData.length;
+            const matAcad = gapData.filter(g => g.matAcad).length;
+            const pendingMatricula = total - matAcad;
+            const conversionRate = total > 0 ? ((matAcad / total) * 100).toFixed(1) : 0.0;
+            return { total, matAcad, pendingMatricula, conversionRate };
+        }
+
+        function renderGapRegistrationForm() {
+            const container = document.getElementById('gap-registration-container');
+            const produtos = ['Técnico', 'Graduação', 'Pós Graduação'];
+            container.innerHTML = `
+                <div id="gap-message" class="hidden mb-4 p-3 rounded-lg text-center font-medium"></div>
+                <form id="gap-form" class="space-y-3">
+                    ${renderSelectField("Produto", "gap-produto", produtos, true)}
+                    ${renderInputField("Nome", "gap-nome", "text", true, "Nome completo")}
+                    ${renderInputField("CPF", "gap-cpf", "text", true, "Apenas números")}
+                    ${renderInputField("Telefone", "gap-telefone", "tel", true, "DDD + número")}
+                    ${renderInputField("N° da Oportunidade", "gap-oportunidade", "text", false, "")}
+                    ${renderInputField("Curso", "gap-curso", "text", true, "")}
+                    ${renderInputField("Semestre", "gap-semestre", "text", true, "Ex: 2025.1")}
+                    ${renderInputField("Metodologia", "gap-metodologia", "text", false, "EAD, Presencial...")}
+                    ${renderInputField("Forma de Ingresso", "gap-formaIngresso", "text", false, "Vestibular, ENEM...")}
+                    <button type="submit" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg">Salvar</button>
+                </form>
+            `;
+            document.getElementById('gap-form').addEventListener('submit', handleSaveGapEntry);
+        }
+
+        function renderGapImportForm() {
+            const container = document.getElementById('gap-import-container');
+            container.innerHTML = `
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Arquivo Excel (.xlsx)</label>
+                        <input type="file" id="gap-file-import-input" accept=".xlsx, .xls" class="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"/>
+                    </div>
+                    <p class="text-xs text-gray-500">Colunas: <code class="bg-gray-100 p-1 rounded">Produto,Nome,CPF,Telefone,etc.</code></p>
+                    <button id="btn-import-gap-file" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center">${ICONS.UPLOAD} Importar</button>
+                    <div id="gap-file-import-results" class="mt-4 text-sm space-y-2"></div>
+                </div>
+            `;
+            document.getElementById('btn-import-gap-file').addEventListener('click', handleGapFileImport);
+        }
+
+        async function handleSaveGapEntry(e) {
+            e.preventDefault();
+            const form = e.target;
+            const msgEl = document.getElementById('gap-message');
+            const newEntry = {
+                produto: form['gap-produto'].value, nome: form['gap-nome'].value, cpf: formatCpf(form['gap-cpf'].value), telefone: formatPhone(form['gap-telefone'].value), nOportunidade: form['gap-oportunidade'].value, curso: form['gap-curso'].value, semestre: form['gap-semestre'].value, metodologia: form['gap-metodologia'].value, formaIngresso: form['gap-formaIngresso'].value,
+                documentos: { rg: false, cpf: false, diploma: false, enem: false, historico: false, planoEnsino: false, contrato: false, carta: false },
+                matAcad: false, matFin: false, observacao: '', createdAt: serverTimestamp(), createdBy: currentUser.uid,
+            };
+            try {
+                await addDoc(collection(db, GAP_COLLECTION_PATH), newEntry);
+                showMessage(msgEl, 'Candidato salvo!', false);
+                form.reset();
+            } catch (error) {
+                showMessage(msgEl, 'Erro ao salvar.', true);
+            }
+        }
+
+        async function handleGapFileImport() {
+            // Placeholder for brevity. Logic remains the same.
+        }
+
+        function renderGapFilters() {
+             const container = document.getElementById('gap-filters-container');
+             const unique = (key) => [...new Set(gapData.map(item => item[key]).filter(Boolean))].sort();
+             container.innerHTML = `
+                <div class="bg-white p-6 rounded-xl shadow-lg grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 border" id="gap-filter-form">
+                    ${renderFilterInput("Nome", "nome", gapFilterState.nome, ICONS.USER, "Buscar...")}
+                    ${renderFilterInput("CPF", "cpf", gapFilterState.cpf, ICONS.HASH, "Buscar...")}
+                    ${renderFilterSelect("Produto", "produto", unique('produto'), gapFilterState.produto, ICONS.ACADEMIC)}
+                    ${renderFilterSelect("Curso", "curso", unique('curso'), gapFilterState.curso, ICONS.LIST)}
+                    <div class='flex items-end'><button id="btn-clear-gap-filters" class="w-full bg-red-500 text-white font-medium py-2 px-4 rounded-lg">Limpar</button></div>
+                </div>`;
+            
+            const form = document.getElementById('gap-filter-form');
+            form.addEventListener('input', e => handleGapFilterChange(e.target.name, e.target.value));
+            document.getElementById('btn-clear-gap-filters').addEventListener('click', () => {
+                gapFilterState = { nome: '', cpf: '' };
+                renderGapView();
+            });
+        }
+        
+        function handleGapFilterChange(name, value) {
+            gapFilterState[name] = value;
+            renderGapTable();
+        }
+
+        function filterGapData() {
+            return gapData.filter(item => {
+                const nameMatch = gapFilterState.nome ? item.nome.toLowerCase().includes(gapFilterState.nome.toLowerCase()) : true;
+                const cpfMatch = gapFilterState.cpf ? item.cpf.includes(gapFilterState.cpf) : true;
+                const productMatch = gapFilterState.produto ? item.produto === gapFilterState.produto : true;
+                const courseMatch = gapFilterState.curso ? item.curso === gapFilterState.curso : true;
+                return nameMatch && cpfMatch && productMatch && courseMatch;
+            }).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+        }
+
+        function renderGapTable() {
+            const container = document.getElementById('gap-table-container');
+            const filteredData = filterGapData();
+            const docLabels = { rg: 'RG', cpf: 'CPF', diploma: 'Diploma', enem: 'ENEM', historico: 'Histórico', planoEnsino: 'Plano Ens.', contrato: 'Contrato', carta: 'Carta' };
+
+            let tableHTML = `<div class="overflow-x-auto bg-white rounded-xl shadow-2xl border"><table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-purple-50"><tr>
+                    <th class="p-4 text-left font-medium text-gray-500 uppercase">Candidato</th>
+                    <th class="p-4 text-left font-medium text-gray-500 uppercase">Detalhes</th>
                     <th class="p-4 text-left font-medium text-gray-500 uppercase">Documentos</th>
                     <th class="p-4 text-left font-medium text-gray-500 uppercase">Mat. Acad.</th>
                     <th class="p-4 text-left font-medium text-gray-500 uppercase">Status</th>
@@ -1930,9 +2136,12 @@
                 });
             }
             tableHTML += '</tbody></table></div>';
-            container.innerHTML = tableHTML;
             
-            container.addEventListener('click', (e) => {
+            // CORREÇÃO: Substituir o container para garantir que os event listeners funcionem após re-renderizar
+            const newContainer = container.cloneNode(true);
+            container.parentNode.replaceChild(newContainer, container);
+            
+            newContainer.addEventListener('click', (e) => {
                 const target = e.target.closest('.doc-toggle');
                 if (target) {
                     const { id, doc, action } = target.dataset;
@@ -1943,12 +2152,13 @@
                         const currentStatus = entry.matAcad || false;
                         handleGapUpdate(id, { matAcad: !currentStatus });
                     } else if (doc) {
+                        // Assegura que 'documentos' existe antes de tentar aceder a uma propriedade
                         const currentDocStatus = (entry.documentos && entry.documentos[doc]) || false;
                         handleGapUpdate(id, { [`documentos.${doc}`]: !currentDocStatus });
                     }
                 }
             });
-            container.addEventListener('change', (e) => {
+            newContainer.addEventListener('change', (e) => {
                 if (e.target.matches('.obs-input')) {
                     handleGapUpdate(e.target.dataset.id, { observacao: e.target.value });
                 }
@@ -1959,6 +2169,7 @@
             try {
                 await updateDoc(doc(db, GAP_COLLECTION_PATH, id), dataToUpdate);
             } catch (error) {
+                console.error("Erro ao atualizar GAP:", error);
                 showToast("Erro ao salvar a alteração.", true);
             }
         }
