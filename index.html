@@ -2082,6 +2082,7 @@
             const form = document.getElementById('gap-filter-form');
             form.addEventListener('input', e => handleGapFilterChange(e.target.name, e.target.value));
             document.getElementById('btn-clear-gap-filters').addEventListener('click', () => {
+                // CORREÇÃO: Resetar o estado completo
                 gapFilterState = { nome: '', cpf: '', matAcad: 'all', gap: 'all', produto: '', curso: '', semestre: '', metodologia: '', formaIngresso: '' };
                 renderGapView();
             });
@@ -2093,12 +2094,19 @@
         }
 
         function filterGapData() {
+            // CORREÇÃO: Usar a função de filtro completa
             return gapData.filter(item => {
                 const nameMatch = gapFilterState.nome ? item.nome.toLowerCase().includes(gapFilterState.nome.toLowerCase()) : true;
                 const cpfMatch = gapFilterState.cpf ? item.cpf.includes(gapFilterState.cpf) : true;
                 const productMatch = gapFilterState.produto ? item.produto === gapFilterState.produto : true;
                 const courseMatch = gapFilterState.curso ? item.curso === gapFilterState.curso : true;
-                return nameMatch && cpfMatch && productMatch && courseMatch;
+                const semestreMatch = gapFilterState.semestre ? item.semestre === gapFilterState.semestre : true;
+                const metodologiaMatch = gapFilterState.metodologia ? item.metodologia === gapFilterState.metodologia : true;
+                const formaIngressoMatch = gapFilterState.formaIngresso ? item.formaIngresso === gapFilterState.formaIngresso : true;
+                const matAcadMatch = gapFilterState.matAcad !== 'all' ? String(item.matAcad) === gapFilterState.matAcad : true;
+                const gapMatch = gapFilterState.gap === 'true' ? !item.matAcad : true;
+
+                return nameMatch && cpfMatch && productMatch && courseMatch && semestreMatch && metodologiaMatch && formaIngressoMatch && matAcadMatch && gapMatch;
             }).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
         }
 
@@ -2653,4 +2661,5 @@
     </script>
 </body>
 </html>
+
 
