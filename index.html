@@ -205,7 +205,7 @@
         let unsubscribeForecastCaptacao = () => {};
         let unsubscribeControleBases = () => {};
         
-        let leadFilterState = { acao: '', dia: '', promotorId: '', converted: 'all', telefone: '', curso: '' };
+        let leadFilterState = { acao: '', dia: '', promotorId: '', status: 'all', telefone: '', curso: '' };
         let gapFilterState = { nome: '', cpf: '', matAcad: 'all', gap: 'all', produto: '', curso: '', semestre: '', metodologia: '', formaIngresso: '' };
         let baseFilterState = { nome: '', cpf: '', produto: '', curso: '', nomeBase: '', status: 'all' };
         let controleBasesFilterState = { period: 'this_month', atendenteId: 'all', meioDisparo: 'all' };
@@ -1081,7 +1081,8 @@
                     ...formData,
                     telefone: cleanedPhone,
                     cpf: cleanedCpf,
-                    converted: false,
+                    status: 'Pendente', // Atualizado
+                    converted: false, // Mantido para estatísticas antigas, se houver
                     createdAt: serverTimestamp(),
                     promotorId: currentUser.uid,
                     promotorName: currentUser.name
@@ -1141,7 +1142,8 @@
                                 ...leadData,
                                 telefone: cleanedPhone,
                                 cpf: cleanedCpf,
-                                converted: false,
+                                status: 'Pendente', // Atualizado
+                                converted: false, // Mantido
                                 createdAt: serverTimestamp(),
                                 promotorId: currentUser.uid,
                                 promotorName: currentUser.name
@@ -1207,7 +1209,7 @@
                     ${renderFilterSelect("Promotor", "promotorId", promotors, leadFilterState.promotorId, ICONS.USER)}
                     ${renderFilterInput("Telefone", "telefone", leadFilterState.telefone, ICONS.PHONE, "Buscar...")}
                     ${renderFilterSelect("Curso", "curso", uniqueCourses, leadFilterState.curso, ICONS.LIST)}
-                    ${renderFilterStatus("Status", "converted", leadFilterState.converted, ICONS.CHECK)}
+                    ${renderFilterSelect("Status", "status", ["Pendente", "Sem Retorno", "Interessado", "Não Interessado", "Convertido"], leadFilterState.status, ICONS.CHECK)}
                     <div class='flex items-end space-x-2 col-span-1 sm:col-span-2 md:col-span-2'>
                         <button id="btn-export-excel" class="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg flex items-center justify-center">${ICONS.DOWNLOAD.replace('mr-2', 'mr-1')} Exportar</button>
                         <button id="btn-clear-lead-filters" class="w-full bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg">Limpar</button>
@@ -1247,7 +1249,7 @@
         }
 
         function handleClearLeadFilters() {
-            leadFilterState = { acao: '', dia: '', promotorId: '', converted: 'all', telefone: '', curso: '' };
+            leadFilterState = { acao: '', dia: '', promotorId: '', status: 'all', telefone: '', curso: '' };
             renderHistory();
         }
 
@@ -1263,7 +1265,10 @@
                 if (leadFilterState.promotorId && lead.promotorName !== leadFilterState.promotorId) return false;
                 if (leadFilterState.telefone && (!lead.telefone || !lead.telefone.includes(leadFilterState.telefone))) return false;
                 if (leadFilterState.curso && lead.cursoInteresse !== leadFilterState.curso) return false;
-                if (leadFilterState.converted !== 'all' && String(lead.converted) !== leadFilterState.converted) return false;
+                
+                const currentStatus = lead.status || (lead.converted ? 'Convertido' : 'Pendente');
+                if (leadFilterState.status !== 'all' && currentStatus !== leadFilterState.status) return false;
+                
                 return true;
             }).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
         }
@@ -1275,7 +1280,15 @@
                 return;
             }
             const dataForSheet = leadsToExport.map(lead => ({
-                'Ação': lead.acao, 'Nome Completo': lead.nome, 'Telefone': lead.telefone, 'Email': lead.email, 'CPF': lead.cpf, 'Curso': lead.cursoInteresse, 'Convertido': lead.converted ? 'Sim' : 'Não', 'Data': formatDate(lead.createdAt), 'Promotor': lead.promotorName
+                'Ação': lead.acao,
+                'Nome Completo': lead.nome,
+                'Telefone': lead.telefone,
+                'Email': lead.email || 'N/A',
+                'CPF': lead.cpf || 'N/A',
+                'Curso de Interesse': lead.cursoInteresse || 'N/A',
+                'Status': lead.status || (lead.converted ? 'Convertido' : 'Pendente'),
+                'Data de Cadastro': formatDate(lead.createdAt),
+                'Promotor': lead.promotorName || 'N/A'
             }));
             const worksheet = XLSX.utils.json_to_sheet(dataForSheet);
             const workbook = XLSX.utils.book_new();
@@ -1286,12 +1299,21 @@
         function renderLeadsTable() {
             const container = document.getElementById('leads-table-container');
             const filteredLeads = filterLeads();
+            const statuses = ["Pendente", "Sem Retorno", "Interessado", "Não Interessado", "Convertido"];
+            const statusColors = {
+                'Pendente': 'bg-gray-200 text-gray-800',
+                'Sem Retorno': 'bg-orange-100 text-orange-800',
+                'Interessado': 'bg-blue-100 text-blue-800',
+                'Não Interessado': 'bg-red-100 text-red-800',
+                'Convertido': 'bg-green-100 text-green-800',
+            };
+
             let tableHTML = `<div class="overflow-x-auto bg-white rounded-xl shadow-2xl border"><table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-blue-50"><tr>
                 <th class="p-4 text-left text-xs font-medium text-gray-500 uppercase">Ação/Data</th>
                 <th class="p-4 text-left text-xs font-medium text-gray-500 uppercase">Nome/Contato</th>
                 <th class="p-4 text-left text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">Curso/Promotor</th>
-                <th class="p-4 text-center text-xs font-medium text-gray-500 uppercase">Conversão</th>
+                <th class="p-4 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
                 <th class="p-4 text-center text-xs font-medium text-gray-500 uppercase">Ações</th>
                 </tr></thead><tbody class="bg-white divide-y divide-gray-200">`;
 
@@ -1300,32 +1322,45 @@
             } else {
                 filteredLeads.forEach(lead => {
                     const promotorName = lead.promotorName || 'Desconhecido';
+                    const currentStatus = lead.status || (lead.converted ? 'Convertido' : 'Pendente');
+                    
                     tableHTML += `<tr class="hover:bg-blue-50">
                         <td class="p-4"><div class="font-medium text-gray-900">${lead.acao}</div><div class="text-xs text-gray-500">${formatDate(lead.createdAt)}</div></td>
                         <td class="p-4"><div class="font-semibold text-blue-600">${lead.nome}</div><div class="text-xs text-gray-500">${lead.telefone}</div></td>
                         <td class="p-4 hidden sm:table-cell"><div class="text-sm">${lead.cursoInteresse || 'N/A'}</div><div class="text-xs text-gray-500">${promotorName}</div></td>
-                        <td class="p-4 text-center"><button data-lead-id="${lead.id}" data-status="${lead.converted}" class="toggle-conversion-btn px-3 py-1 rounded-full text-xs font-bold ${lead.converted ? 'bg-green-500 text-white' : 'bg-red-100 text-red-700'}">${lead.converted ? 'CONVERTIDO' : 'PENDENTE'}</button></td>
+                        <td class="p-4 text-center">
+                            <select data-lead-id="${lead.id}" class="lead-status-selector rounded-lg p-2 border text-xs font-bold ${statusColors[currentStatus] || 'bg-gray-200'}">
+                                ${statuses.map(s => `<option value="${s}" ${currentStatus === s ? 'selected' : ''}>${s.toUpperCase()}</option>`).join('')}
+                            </select>
+                        </td>
                         <td class="p-4 text-center"><a href="https://wa.me/55${lead.telefone}" target="_blank" class="text-green-600 hover:text-green-800">WhatsApp</a></td>
                     </tr>`;
                 });
             }
             tableHTML += `</tbody></table></div>`;
-            container.innerHTML = tableHTML;
             
-            container.addEventListener('click', e => {
-                if (e.target.classList.contains('toggle-conversion-btn')) {
-                    const { leadId, status } = e.target.dataset;
-                    handleConversionToggle(leadId, status === 'true');
+            // Substituir o container para limpar listeners antigos antes de adicionar novos
+            const newContainer = container.cloneNode(false); // Clone without children
+            newContainer.innerHTML = tableHTML;
+            container.parentNode.replaceChild(newContainer, container);
+
+            newContainer.addEventListener('change', e => {
+                if (e.target.classList.contains('lead-status-selector')) {
+                    const { leadId } = e.target.dataset;
+                    const newStatus = e.target.value;
+                    handleLeadStatusUpdate(leadId, newStatus);
                 }
-            })
+            });
         }
 
-        async function handleConversionToggle(leadId, currentStatus) {
+        async function handleLeadStatusUpdate(leadId, newStatus) {
             try {
-                await updateDoc(doc(db, LEADS_COLLECTION_PATH, leadId), { converted: !currentStatus });
+                const isConverted = newStatus === 'Convertido';
+                await updateDoc(doc(db, LEADS_COLLECTION_PATH, leadId), { status: newStatus, converted: isConverted });
+                showToast('Status do lead atualizado!', false);
             } catch (error) {
                 console.error("Erro ao atualizar status:", error);
-                showToast("Você não tem permissão para alterar este lead.", true);
+                showToast("Não foi possível atualizar o status.", true);
             }
         }
         
@@ -1576,7 +1611,7 @@
                     ${renderFilterSelect("Nome da Base", "nomeBase", unique('nomeBase'), baseFilterState.nomeBase, ICONS.TAG)}
                     ${renderFilterSelect("Produto", "produto", unique('produto'), baseFilterState.produto, ICONS.BOOKMARK)}
                     ${renderFilterSelect("Curso", "curso", unique('curso'), baseFilterState.curso, ICONS.ACADEMIC)}
-                    ${renderFilterSelect("Status", "status", ["Pendente", "Convertido", "Interessado", "Não Interessado"], baseFilterState.status, ICONS.CHECK)}
+                    ${renderFilterSelect("Status", "status", ["Pendente", "Sem Retorno", "Interessado", "Não Interessado", "Convertido"], baseFilterState.status, ICONS.CHECK)}
                     <div class='flex items-end'><button id="btn-clear-base-filters" class="w-full bg-red-500 text-white font-medium py-2 px-4 rounded-lg">Limpar</button></div>
                 </div>`;
             
@@ -1609,7 +1644,7 @@
         function renderBasesTable() {
             const container = document.getElementById('bases-table-container');
             const filteredData = filterBasesData();
-            const statuses = ["Pendente", "Interessado", "Não Interessado", "Convertido"];
+            const statuses = ["Pendente", "Sem Retorno", "Interessado", "Não Interessado", "Convertido"];
 
             let tableHTML = `<div class="overflow-x-auto bg-white rounded-xl shadow-2xl border"><table class="min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="bg-yellow-50"><tr>
@@ -1625,6 +1660,7 @@
                 filteredData.forEach(entry => {
                     const statusColors = {
                         'Pendente': 'bg-gray-200 text-gray-800',
+                        'Sem Retorno': 'bg-orange-100 text-orange-800',
                         'Interessado': 'bg-blue-100 text-blue-800',
                         'Não Interessado': 'bg-red-100 text-red-800',
                         'Convertido': 'bg-green-100 text-green-800',
@@ -2616,4 +2652,5 @@
     </script>
 </body>
 </html>
+
 
