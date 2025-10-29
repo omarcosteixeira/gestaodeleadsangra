@@ -13,7 +13,7 @@
     <!-- Google Fonts: Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://css.gg/css?=|check|close|user|upload|search|tag|phone|mail|list|calendar|hash|briefcase|bookmark" rel="stylesheet">
+    <link href="https://css.gg/css?=|check|close|user|upload|search|tag|phone|mail|list|calendar|hash|briefcase|bookmark|link" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         /* Estilos globais para a fonte e transições */
@@ -81,6 +81,7 @@
                 <div id="view-historico" class="view-content space-y-8 hidden"></div>
                 <div id="view-bases" class="view-content space-y-8 hidden"></div>
                 <div id="view-controle-bases" class="view-content space-y-8 hidden"></div>
+                <div id="view-campanhas" class="view-content space-y-8 hidden"></div>
                 <div id="view-gap" class="view-content space-y-8 hidden"></div>
                 <div id="view-admin" class="view-content space-y-8 hidden"></div>
             </div>
@@ -182,6 +183,11 @@
         const BOM_DIA_CAPTACAO_COLLECTION_PATH = `artifacts/${appId}/public/data/bomDiaCaptacao`;
         const FORECAST_CAPTACAO_COLLECTION_PATH = `artifacts/${appId}/public/data/forecastCaptacao`;
         const CONTROLE_BASES_COLLECTION_PATH = `artifacts/${appId}/public/data/controleBases`;
+        const CAPTACAO_CONFIG_PATH = `artifacts/${appId}/public/data/configuracaoCaptacao`;
+        const PERIODO_CONFIG_DOC_ID = "periodo_atual";
+        const CAMPANHAS_COLLECTION_PATH = `artifacts/${appId}/public/data/campanhas`;
+        const LINKS_UTEIS_COLLECTION_PATH = `artifacts/${appId}/public/data/linksUteis`;
+
 
         let db;
         let auth;
@@ -194,6 +200,9 @@
         let bomDiaCaptacaoData = [];
         let forecastData = [];
         let controleBasesData = [];
+        let captacaoConfigData = null;
+        let campanhasData = [];
+        let linksUteisData = [];
         let currentView = 'cadastro';
         let isAuthReady = false;
         let unsubscribeLeads = () => {};
@@ -204,11 +213,15 @@
         let unsubscribeBomDiaCaptacao = () => {};
         let unsubscribeForecastCaptacao = () => {};
         let unsubscribeControleBases = () => {};
+        let unsubscribeCaptacaoConfig = () => {};
+        let unsubscribeCampanhas = () => {};
+        let unsubscribeLinksUteis = () => {};
         
         let leadFilterState = { acao: '', dia: '', promotorId: '', status: 'all', telefone: '', curso: '' };
         let gapFilterState = { nome: '', cpf: '', matAcad: 'all', gap: 'all', produto: '', curso: '', semestre: '', metodologia: '', formaIngresso: '' };
         let baseFilterState = { nome: '', cpf: '', produto: '', curso: '', nomeBase: '', status: 'all' };
         let controleBasesFilterState = { period: 'this_month', atendenteId: 'all', meioDisparo: 'all' };
+        let campanhaFilterState = { nome: '', data: '', status: 'all' };
 
         // --- Configuração de Perfis e Permissões ---
         const ROLES = { 
@@ -225,6 +238,7 @@
             'historico': [ROLES.FDV, ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV], 
             'bases':     [ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV],
             'controle-bases': [ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV],
+            'campanhas': [ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV],
             'gap':       [ROLES.SALA_MATRICULA, ROLES.LIDER_FDV],
             'admin':     [ROLES.LIDER_FDV] 
         };
@@ -236,6 +250,13 @@
             if (!timestamp) return 'N/A';
             const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
             return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        };
+        const formatDateForInput = (date) => {
+             if (!date) return '';
+             const d = date.toDate ? date.toDate() : new Date(date);
+             // Ajusta para o fuso horário local para evitar problemas de "um dia antes"
+             d.setMinutes(d.getMinutes() + d.getTimezoneOffset());
+             return d.toISOString().split('T')[0];
         };
 
         function calculateWeekdays(startDate, endDate) {
@@ -269,6 +290,8 @@
             DATABASE: generateIcon('<ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>'),
             BOOKMARK: generateIcon('<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>'),
             CLOSE: generateIcon('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'),
+            BRIEFCASE: generateIcon('<rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>'),
+            LINK: generateIcon('<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>'),
         };
         
         // --- UI Helpers ---
@@ -343,6 +366,7 @@
                 case 'historico': renderHistory(); break;
                 case 'bases': renderBasesView(); break;
                 case 'controle-bases': renderControleBasesView(); break;
+                case 'campanhas': renderCampanhasView(); break;
                 case 'gap': renderGapView(); break;
                 case 'admin': renderAdminPanel(); break;
             }
@@ -357,6 +381,7 @@
                 { view: 'historico', label: 'Histórico', icon: ICONS.LIST },
                 { view: 'bases', label: 'Bases', icon: ICONS.DATABASE },
                 { view: 'controle-bases', label: 'Controle', icon: ICONS.BOOKMARK },
+                { view: 'campanhas', label: 'Campanhas', icon: ICONS.BRIEFCASE },
                 { view: 'gap', label: 'GAP', icon: ICONS.ACADEMIC },
                 { view: 'admin', label: 'Gerenciar', icon: ICONS.USERS }
             ];
@@ -458,6 +483,8 @@
             bomDiaCaptacaoData = [];
             forecastData = [];
             controleBasesData = [];
+            campanhasData = [];
+            linksUteisData = [];
             unsubscribeLeads();
             unsubscribeUsers();
             unsubscribeGap();
@@ -466,6 +493,9 @@
             unsubscribeBomDiaCaptacao();
             unsubscribeForecastCaptacao();
             unsubscribeControleBases();
+            unsubscribeCaptacaoConfig();
+            unsubscribeCampanhas();
+            unsubscribeLinksUteis();
             document.getElementById('app-container').classList.add('hidden');
             document.getElementById('auth-screen').classList.remove('hidden');
             renderAuthScreen(true);
@@ -621,6 +651,14 @@
                     if (currentView === 'controle-bases') renderView('controle-bases');
                 }, (error) => console.error("Erro ao ouvir controle de bases:", error));
             }
+            
+            if (canView('campanhas')) {
+                const campanhasQuery = query(collection(db, CAMPANHAS_COLLECTION_PATH));
+                unsubscribeCampanhas = onSnapshot(campanhasQuery, (snapshot) => {
+                    campanhasData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    if (currentView === 'campanhas') renderView('campanhas');
+                }, (error) => console.error("Erro ao ouvir campanhas:", error));
+            }
 
             if (canView('gap')) {
                 const gapQuery = query(collection(db, GAP_COLLECTION_PATH));
@@ -631,6 +669,14 @@
             }
 
             if (canView('dashboard') || canView('admin')) {
+                const linksUteisQuery = query(collection(db, LINKS_UTEIS_COLLECTION_PATH));
+                unsubscribeLinksUteis = onSnapshot(linksUteisQuery, (snapshot) => {
+                    linksUteisData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    if (['dashboard', 'admin'].includes(currentView)) {
+                        renderView(currentView);
+                    }
+                }, (error) => console.error("Erro ao ouvir Links Uteis:", error));
+
                 const plannerQuery = query(collection(db, PLANNER_COLLECTION_PATH));
                 unsubscribePlanner = onSnapshot(plannerQuery, (snapshot) => {
                     plannerData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -654,13 +700,33 @@
                         renderView(currentView);
                     }
                 }, (error) => console.error("Erro ao ouvir Forecast Captação:", error));
+
+                // NOVO: Listener para Configuração do Período de Captação
+                const configDocRef = doc(db, CAPTACAO_CONFIG_PATH, PERIODO_CONFIG_DOC_ID);
+                unsubscribeCaptacaoConfig = onSnapshot(configDocRef, (docSnap) => {
+                    if (docSnap.exists()) {
+                        captacaoConfigData = docSnap.data();
+                    } else {
+                        captacaoConfigData = null; // Nenhum período definido
+                    }
+                    if (currentView === 'dashboard' || currentView === 'admin') {
+                        renderView(currentView);
+                    }
+                }, (error) => console.error("Erro ao ouvir config de captação:", error));
             }
         }
         
         // --- 3. Dashboard ---
         function renderDashboard() {
             const dashboardEl = document.getElementById('view-dashboard');
+            
+            let periodoHtml = renderPeriodoCaptacaoCard();
+            let linksUteisHtml = renderLinksUteisDashboard();
+
             dashboardEl.innerHTML = `
+                ${linksUteisHtml} 
+                ${periodoHtml} 
+
                 <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-blue-500 pb-2 mb-8">Bom Dia Captação</h2>
                 <div id="bom-dia-captacao-container" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
                     ${renderBomDiaCaptacaoCards()}
@@ -690,6 +756,71 @@
                     }
                 });
             }
+        }
+
+        function renderLinksUteisDashboard() {
+            if (!linksUteisData || linksUteisData.length === 0) {
+                return ''; // Não mostra nada se não houver links
+            }
+            
+            let linksHtml = linksUteisData.map(link => `
+                <a href="${link.url}" target="_blank" class="bg-white p-4 rounded-xl shadow-lg border border-gray-200 flex items-center space-x-3 hover:bg-gray-50 transition-all">
+                    ${ICONS.LINK.replace('h-5 w-5 mr-2 inline-block', 'h-6 w-6 text-blue-600')}
+                    <span class="font-semibold text-blue-700">${link.nome}</span>
+                </a>
+            `).join('');
+
+            return `
+                <div class="mb-8">
+                    <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-gray-500 pb-2 mb-4">Links Úteis</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        ${linksHtml}
+                    </div>
+                </div>
+            `;
+        }
+
+        // NOVO: Função para renderizar o card do período
+        function renderPeriodoCaptacaoCard() {
+            let dataInicioStr = "N/D";
+            let dataFimStr = "N/D";
+            let diasRestantesDisplay = "N/A";
+
+            if (captacaoConfigData && captacaoConfigData.dataInicio && captacaoConfigData.dataFim) {
+                const inicio = new Date(captacaoConfigData.dataInicio + "T00:00:00");
+                const fim = new Date(captacaoConfigData.dataFim + "T00:00:00");
+                const hoje = new Date();
+                hoje.setHours(0, 0, 0, 0);
+                
+                dataInicioStr = inicio.toLocaleDateString('pt-BR', {timeZone: 'UTC'});
+                dataFimStr = fim.toLocaleDateString('pt-BR', {timeZone: 'UTC'});
+
+                if (hoje <= fim) {
+                    diasRestantesDisplay = calculateWeekdays(hoje, fim);
+                } else {
+                    diasRestantesDisplay = 0; // Período terminou
+                }
+            }
+
+            return `
+            <div class="bg-white p-6 rounded-xl shadow-lg border-t-4 border-indigo-500 mb-8">
+                <h3 class="text-xl font-bold text-gray-800 mb-4">Período da Captação</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                    <div>
+                        <p class="text-sm font-medium text-gray-500">Data Início</p>
+                        <p class="text-2xl font-bold text-gray-900">${dataInicioStr}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium text-gray-500">Data Fim</p>
+                        <p class="text-2xl font-bold text-gray-900">${dataFimStr}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium text-gray-500">Dias Úteis Restantes</p>
+                        <p class="text-2xl font-bold text-indigo-600">${diasRestantesDisplay}</p>
+                    </div>
+                </div>
+            </div>
+            `;
         }
         
         function renderBomDiaCaptacaoCards() {
@@ -896,7 +1027,7 @@
 
         function calculateStats() {
             const totalLeads = leadsData.length;
-            const convertedLeads = leadsData.filter(lead => lead.converted).length;
+            const convertedLeads = leadsData.filter(lead => lead.status === 'Convertido').length;
             const userLeads = leadsData.filter(lead => lead.promotorId === currentUser.uid).length;
             const conversionRate = totalLeads > 0 ? ((convertedLeads / totalLeads) * 100).toFixed(1) : 0.0;
             return { totalLeads, convertedLeads, userLeads, conversionRate };
@@ -1234,13 +1365,22 @@
         }
 
         function renderFilterSelect(label, name, options, currentValue, iconHTML) { 
-            return `<div><label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">${iconHTML.replace('h-5 w-5','h-4 w-4').replace('mr-2 inline-block','mr-1 text-blue-500')} ${label}</label><select id="${name}" name="${name}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border"><option value="">-- Todos --</option>${options.map(opt => `<option value="${opt}" ${opt === currentValue ? 'selected' : ''}>${opt}</option>`).join('')}</select></div>`; 
+            const isAll = currentValue === 'all' || currentValue === '';
+            return `<div><label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">${iconHTML.replace('h-5 w-5','h-4 w-4').replace('mr-2 inline-block','mr-1 text-blue-500')} ${label}</label><select id="${name}" name="${name}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border"><option value="all" ${isAll ? 'selected' : ''}>-- Todos --</option>${options.map(opt => `<option value="${opt}" ${opt === currentValue ? 'selected' : ''}>${opt}</option>`).join('')}</select></div>`; 
         }
+        
+        // NOVO: Helper para filtros com valor e texto diferentes (ex: Sim/Não)
+        function renderFilterSelectCustom(label, name, options, currentValue, iconHTML) {
+            const isAll = currentValue === 'all' || currentValue === '';
+             return `<div><label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">${iconHTML.replace('h-5 w-5','h-4 w-4').replace('mr-2 inline-block','mr-1 text-blue-500')} ${label}</label>
+             <select id="${name}" name="${name}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border">
+                <option value="all" ${isAll ? 'selected' : ''}>-- Todos --</option>
+                ${options.map(opt => `<option value="${opt.value}" ${opt.value === currentValue ? 'selected' : ''}>${opt.label}</option>`).join('')}
+             </select></div>`;
+        }
+
         function renderFilterDate(label, name, currentValue, iconHTML) { 
             return `<div><label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">${iconHTML.replace('h-5 w-5','h-4 w-4').replace('mr-2 inline-block','mr-1 text-blue-500')} ${label}</label><input type="date" name="${name}" id="${name}" value="${currentValue}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border"/></div>`; 
-        }
-        function renderFilterStatus(label, name, currentValue, iconHTML) { 
-            return `<div><label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">${iconHTML.replace('h-5 w-5','h-4 w-4').replace('mr-2 inline-block','mr-1 text-blue-500')} ${label}</label><select id="${name}" name="${name}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border"><option value="all">Todos</option><option value="true">Convertido</option><option value="false">Pendente</option></select></div>`; 
         }
 
         function handleLeadFilterChange(name, value) {
@@ -1963,6 +2103,221 @@
             }
         }
         
+        // --- 9. Campanhas ---
+        function renderCampanhasView() {
+            const el = document.getElementById('view-campanhas');
+            el.innerHTML = `
+                <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-orange-500 pb-2 mb-8">Gestão de Campanhas</h2>
+                
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+                    <div class="lg:col-span-1">
+                         <h3 class="text-xl font-bold text-gray-800 mb-2">Nova Campanha</h3>
+                        <div id="campanha-registration-container" class="bg-white p-6 rounded-xl shadow-lg border"></div>
+                    </div>
+                    <div class="lg:col-span-2">
+                         <h3 class="text-xl font-bold text-gray-800 mb-2">Filtros e Histórico</h3>
+                        <div id="campanha-filters-container" class="bg-white p-6 rounded-xl shadow-lg border mb-8"></div>
+                        <div id="campanha-table-container" class="bg-white rounded-xl shadow-lg border"></div>
+                    </div>
+                </div>
+            `;
+            renderCampanhasRegistrationForm();
+            renderCampanhasFilters();
+            renderCampanhasTable();
+        }
+
+        function renderCampanhasRegistrationForm() {
+            const container = document.getElementById('campanha-registration-container');
+            container.innerHTML = `
+                <div id="campanha-message" class="hidden mb-4 p-3 rounded-lg text-center font-medium"></div>
+                <form id="campanha-form" class="space-y-4">
+                    <input type="hidden" id="campanha-id">
+                    ${renderInputField("Nome da Campanha", "campanha-nome", "text", true, "Ex: Bolsa 50% Férias", ICONS.TAG)}
+                    ${renderInputField("Descrição da Bolsa", "campanha-descricao", "text", true, "Ex: 50% nas 3 primeiras...")}
+                    ${renderInputField("Link do Regulamento", "campanha-link", "url", false, "https://...")}
+                    ${renderInputField("Data Início", "campanha-dataInicio", "date", true, "")}
+                    ${renderInputField("Data Fim", "campanha-dataFim", "date", true, "")}
+                    
+                    <button type="submit" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-4 rounded-lg">Salvar Campanha</button>
+                    <button type="button" id="btn-clear-campanha-form" class="w-full bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Limpar</button>
+                </form>
+            `;
+            
+            document.getElementById('campanha-form').addEventListener('submit', handleSaveCampanha);
+            document.getElementById('btn-clear-campanha-form').addEventListener('click', () => {
+                 const form = document.getElementById('campanha-form');
+                 form.reset();
+                 form['campanha-id'].value = '';
+            });
+        }
+        
+        function renderCampanhasFilters() {
+            const container = document.getElementById('campanha-filters-container');
+            container.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="campanha-filter-form">
+                    ${renderFilterInput("Nome da Campanha", "nome", campanhaFilterState.nome, ICONS.TAG, "Buscar...")}
+                    ${renderFilterDate("Buscar por Data", "data", campanhaFilterState.data, ICONS.CALENDAR)}
+                    ${renderFilterSelectCustom("Status", "status", [{value: 'vigente', label: 'Vigente'}, {value: 'finalizada', label: 'Finalizada'}], campanhaFilterState.status, ICONS.CHECK)}
+                </div>
+            `;
+            
+            const form = document.getElementById('campanha-filter-form');
+            form.addEventListener('input', e => handleCampanhaFilterChange(e.target.name, e.target.value));
+            form.addEventListener('change', e => handleCampanhaFilterChange(e.target.name, e.target.value));
+        }
+
+        function handleCampanhaFilterChange(name, value) {
+            campanhaFilterState[name] = value;
+            renderCampanhasTable();
+        }
+
+        function filterCampanhasData() {
+            const hoje = new Date();
+            hoje.setHours(0,0,0,0);
+
+            return campanhasData.filter(item => {
+                const nameMatch = campanhaFilterState.nome ? item.nome.toLowerCase().includes(campanhaFilterState.nome.toLowerCase()) : true;
+                
+                const inicio = new Date(item.dataInicio + "T00:00:00");
+                const fim = new Date(item.dataFim + "T00:00:00");
+                
+                let dateMatch = true;
+                if(campanhaFilterState.data) {
+                    const dataFiltro = new Date(campanhaFilterState.data + "T00:00:00");
+                    dateMatch = dataFiltro >= inicio && dataFiltro <= fim;
+                }
+                
+                const isVigente = hoje <= fim;
+                let statusMatch = true;
+                if(campanhaFilterState.status === 'vigente') {
+                    statusMatch = isVigente;
+                } else if (campanhaFilterState.status === 'finalizada') {
+                    statusMatch = !isVigente;
+                }
+
+                return nameMatch && dateMatch && statusMatch;
+            }).sort((a,b) => new Date(b.dataInicio) - new Date(a.dataInicio));
+        }
+        
+        function renderCampanhasTable() {
+            const container = document.getElementById('campanha-table-container');
+            const data = filterCampanhasData();
+            
+            let tableHTML = `<div class="overflow-x-auto"><table class="w-full text-sm text-left text-gray-500">
+                <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-2">Campanha</th>
+                        <th class="px-4 py-2">Período</th>
+                        <th class="px-4 py-2">Status</th>
+                        <th class="px-4 py-2">Ações</th>
+                    </tr>
+                </thead><tbody>`;
+            
+            if (data.length === 0) {
+                tableHTML += `<tr><td colspan="4" class="p-4 text-center">Nenhuma campanha encontrada.</td></tr>`;
+            } else {
+                const hoje = new Date();
+                hoje.setHours(0,0,0,0);
+                
+                data.forEach(item => {
+                    const fim = new Date(item.dataFim + "T00:00:00");
+                    const isVigente = hoje <= fim;
+                    let statusHtml = '';
+
+                    if(isVigente) {
+                        const diasRestantes = calculateWeekdays(hoje, fim);
+                        statusHtml = `<span class="px-2 py-1 font-semibold rounded-full bg-green-100 text-green-800">Vigente (${diasRestantes} dias)</span>`;
+                    } else {
+                        statusHtml = `<span class="px-2 py-1 font-semibold rounded-full bg-red-100 text-red-800">Finalizada</span>`;
+                    }
+                    
+                    tableHTML += `<tr class="bg-white border-b">
+                        <td class="px-4 py-2"><div class="font-medium">${item.nome}</div><div class="text-xs text-gray-500">${item.descricao}</div></td>
+                        <td class="px-4 py-2">${formatDateForInput(item.dataInicio)} - ${formatDateForInput(item.dataFim)}</td>
+                        <td class="px-4 py-2">${statusHtml}</td>
+                        <td class="px-4 py-2 space-x-2">
+                            ${item.link ? `<a href="${item.link}" target="_blank" class="text-blue-600">Reg.</a>` : ''}
+                            <button class="edit-campanha-btn text-blue-600" data-id="${item.id}">Editar</button>
+                            <button class="delete-campanha-btn text-red-600" data-id="${item.id}">Excluir</button>
+                        </td>
+                    </tr>`;
+                });
+            }
+            tableHTML += '</tbody></table></div>';
+            
+            const newContainer = container.cloneNode(false);
+            container.parentNode.replaceChild(newContainer, container);
+            newContainer.innerHTML = tableHTML;
+            newContainer.addEventListener('click', handleCampanhaTableActions);
+        }
+        
+        async function handleSaveCampanha(e) {
+            e.preventDefault();
+            const form = e.target;
+            const msgEl = document.getElementById('campanha-message');
+            const id = form['campanha-id'].value;
+            
+            const entry = {
+                nome: form['campanha-nome'].value,
+                descricao: form['campanha-descricao'].value,
+                link: form['campanha-link'].value,
+                dataInicio: form['campanha-dataInicio'].value,
+                dataFim: form['campanha-dataFim'].value,
+                updatedAt: serverTimestamp(),
+            };
+
+            if (!entry.nome || !entry.descricao || !entry.dataInicio || !entry.dataFim) {
+                showMessage(msgEl, 'Preencha todos os campos obrigatórios.', true);
+                return;
+            }
+
+            try {
+                if (id) {
+                    await updateDoc(doc(db, CAMPANHAS_COLLECTION_PATH, id), entry);
+                    showToast('Campanha atualizada!');
+                } else {
+                    await addDoc(collection(db, CAMPANHAS_COLLECTION_PATH), entry);
+                    showMessage(msgEl, 'Campanha salva!', false);
+                }
+                form.reset();
+                form['campanha-id'].value = '';
+            } catch(error) {
+                console.error("Erro ao salvar campanha:", error);
+                showMessage(msgEl, 'Erro ao salvar a campanha.', true);
+            }
+        }
+        
+        function handleCampanhaTableActions(e) {
+            const id = e.target.dataset.id;
+            if(!id) return;
+            
+            if(e.target.classList.contains('edit-campanha-btn')) {
+                const item = campanhasData.find(d => d.id === id);
+                if(item) {
+                    const form = document.getElementById('campanha-form');
+                    form['campanha-id'].value = item.id;
+                    form['campanha-nome'].value = item.nome;
+                    form['campanha-descricao'].value = item.descricao;
+                    form['campanha-link'].value = item.link;
+                    form['campanha-dataInicio'].value = item.dataInicio;
+                    form['campanha-dataFim'].value = item.dataFim;
+                }
+            } else if (e.target.classList.contains('delete-campanha-btn')) {
+                 showConfirm('Tem certeza que deseja excluir esta campanha?', () => {
+                    handleDeleteCampanha(id);
+                });
+            }
+        }
+
+        async function handleDeleteCampanha(id) {
+            try {
+                await deleteDoc(doc(db, CAMPANHAS_COLLECTION_PATH, id));
+                showToast('Campanha excluída!');
+            } catch(error) {
+                showToast('Erro ao excluir campanha.', true);
+            }
+        }
+        
         // --- 9. GAP Acadêmico ---
         function renderGapView() {
             const gapEl = document.getElementById('view-gap');
@@ -2075,18 +2430,22 @@
              const container = document.getElementById('gap-filters-container');
              const unique = (key) => [...new Set(gapData.map(item => item[key]).filter(Boolean))].sort();
              container.innerHTML = `
-                <div class="bg-white p-6 rounded-xl shadow-lg grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 border" id="gap-filter-form">
+                <div class="bg-white p-6 rounded-xl shadow-lg grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 border" id="gap-filter-form">
                     ${renderFilterInput("Nome", "nome", gapFilterState.nome, ICONS.USER, "Buscar...")}
                     ${renderFilterInput("CPF", "cpf", gapFilterState.cpf, ICONS.HASH, "Buscar...")}
                     ${renderFilterSelect("Produto", "produto", unique('produto'), gapFilterState.produto, ICONS.ACADEMIC)}
                     ${renderFilterSelect("Curso", "curso", unique('curso'), gapFilterState.curso, ICONS.LIST)}
-                    <div class='flex items-end'><button id="btn-clear-gap-filters" class="w-full bg-red-500 text-white font-medium py-2 px-4 rounded-lg">Limpar</button></div>
+                    ${renderFilterSelectCustom("Mat. Acadêmica", "matAcad", [{value: 'true', label: 'Sim'}, {value: 'false', label: 'Não'}], gapFilterState.matAcad, ICONS.CHECK)}
+                    ${renderFilterSelectCustom("GAP", "gap", [{value: 'true', label: 'Sim (Em GAP)'}, {value: 'false', label: 'Não (Resolvido)'}], gapFilterState.gap, ICONS.CLOSE)}
+                    <div class='flex items-end col-span-1 sm:col-span-2 md:col-span-3 lg:col-span-4'><button id="btn-clear-gap-filters" class="w-full bg-red-500 text-white font-medium py-2 px-4 rounded-lg">Limpar</button></div>
                 </div>`;
             
             const form = document.getElementById('gap-filter-form');
             form.addEventListener('input', e => handleGapFilterChange(e.target.name, e.target.value));
+            form.addEventListener('change', e => handleGapFilterChange(e.target.name, e.target.value)); // Adicionado para selects
             document.getElementById('btn-clear-gap-filters').addEventListener('click', () => {
-                gapFilterState = { nome: '', cpf: '' };
+                // CORREÇÃO: Resetar o estado completo
+                gapFilterState = { nome: '', cpf: '', matAcad: 'all', gap: 'all', produto: '', curso: '', semestre: '', metodologia: '', formaIngresso: '' };
                 renderGapView();
             });
         }
@@ -2097,12 +2456,23 @@
         }
 
         function filterGapData() {
+            // CORREÇÃO: Usar a função de filtro completa
             return gapData.filter(item => {
                 const nameMatch = gapFilterState.nome ? item.nome.toLowerCase().includes(gapFilterState.nome.toLowerCase()) : true;
                 const cpfMatch = gapFilterState.cpf ? item.cpf.includes(gapFilterState.cpf) : true;
                 const productMatch = gapFilterState.produto ? item.produto === gapFilterState.produto : true;
                 const courseMatch = gapFilterState.curso ? item.curso === gapFilterState.curso : true;
-                return nameMatch && cpfMatch && productMatch && courseMatch;
+                
+                const matAcadMatch = gapFilterState.matAcad === 'all' ? true : String(item.matAcad || false) === gapFilterState.matAcad;
+                
+                let gapMatch = true;
+                if (gapFilterState.gap === 'true') {
+                    gapMatch = !item.matAcad;
+                } else if (gapFilterState.gap === 'false') {
+                    gapMatch = item.matAcad === true;
+                }
+
+                return nameMatch && cpfMatch && productMatch && courseMatch && matAcadMatch && gapMatch;
             }).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
         }
 
@@ -2140,9 +2510,12 @@
                 });
             }
             tableHTML += '</tbody></table></div>';
-            container.innerHTML = tableHTML;
             
-            container.addEventListener('click', (e) => {
+            // CORREÇÃO: Substituir o container para garantir que os event listeners funcionem após re-renderizar
+            const newContainer = container.cloneNode(true);
+            container.parentNode.replaceChild(newContainer, container);
+            
+            newContainer.addEventListener('click', (e) => {
                 const target = e.target.closest('.doc-toggle');
                 if (target) {
                     const { id, doc, action } = target.dataset;
@@ -2153,12 +2526,13 @@
                         const currentStatus = entry.matAcad || false;
                         handleGapUpdate(id, { matAcad: !currentStatus });
                     } else if (doc) {
+                        // Assegura que 'documentos' existe antes de tentar aceder a uma propriedade
                         const currentDocStatus = (entry.documentos && entry.documentos[doc]) || false;
                         handleGapUpdate(id, { [`documentos.${doc}`]: !currentDocStatus });
                     }
                 }
             });
-            container.addEventListener('change', (e) => {
+            newContainer.addEventListener('change', (e) => {
                 if (e.target.matches('.obs-input')) {
                     handleGapUpdate(e.target.dataset.id, { observacao: e.target.value });
                 }
@@ -2169,6 +2543,7 @@
             try {
                 await updateDoc(doc(db, GAP_COLLECTION_PATH, id), dataToUpdate);
             } catch (error) {
+                console.error("Erro ao atualizar GAP:", error);
                 showToast("Erro ao salvar a alteração.", true);
             }
         }
@@ -2197,6 +2572,40 @@
                     </table>
                 </div>
                 
+                <!-- NOVO: Gerenciamento do Período de Captação -->
+                <div id="captacao-config-section" class="mt-12">
+                    <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-indigo-500 pb-2 mb-4">Período da Captação</h2>
+                    <div class="bg-white p-6 md:p-8 rounded-xl shadow-2xl border border-gray-100 mb-8">
+                        <form id="captacao-config-form" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                            ${renderInputField("Data Início", "config-data-inicio", "date", true)}
+                            ${renderInputField("Data Fim", "config-data-fim", "date", true)}
+                            <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg">Salvar Período</button>
+                        </form>
+                    </div>
+                </div>
+
+                <div id="links-uteis-management-section" class="mt-12">
+                    <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-cyan-500 pb-2 mb-4">Gerenciamento de Links Úteis</h2>
+                    <div class="bg-white p-6 md:p-8 rounded-xl shadow-2xl border border-gray-100 mb-8">
+                        <h3 id="links-uteis-form-title" class="text-xl font-bold text-gray-800 mb-4">Adicionar Novo Link</h3>
+                        <form id="links-uteis-form" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                            <input type="hidden" id="links-uteis-id">
+                            ${renderInputField("Nome do Link", "link-nome", "text", true, "Ex: Portal Estácio", ICONS.TAG)}
+                            ${renderInputField("URL do Link", "link-url", "url", true, "https://...")}
+                            <div class="flex space-x-2">
+                                <button type="submit" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded-lg">Salvar</button>
+                                <button type="button" id="btn-clear-links-uteis-form" class="w-full bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Limpar</button>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="overflow-x-auto bg-white rounded-xl shadow-2xl border border-gray-100">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-100"><tr><th class="p-4 text-left text-xs font-medium text-gray-500 uppercase">Nome</th><th class="p-4 text-left text-xs font-medium text-gray-500 uppercase">Link</th><th class="p-4 text-center text-xs font-medium text-gray-500 uppercase">Ações</th></tr></thead>
+                            <tbody id="links-uteis-table-body" class="bg-white divide-y divide-gray-200"></tbody>
+                        </table>
+                    </div>
+                </div>
+
                 <div id="planner-management-section" class="mt-12">
                     <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-green-500 pb-2 mb-4">Gerenciamento do Planner Semanal</h2>
                     <div class="bg-white p-6 md:p-8 rounded-xl shadow-2xl border border-gray-100 mb-8">
@@ -2318,6 +2727,13 @@
                 </div>
             `;
             
+            // Preencher o formulário de config de captação
+            if (captacaoConfigData) {
+                document.getElementById('config-data-inicio').value = captacaoConfigData.dataInicio || '';
+                document.getElementById('config-data-fim').value = captacaoConfigData.dataFim || '';
+            }
+            document.getElementById('captacao-config-form').addEventListener('submit', handleSaveCaptacaoConfig);
+            
             renderPlannerTable();
             document.getElementById('planner-form').addEventListener('submit', handleSavePlannerTask);
             document.getElementById('btn-clear-planner-form').addEventListener('click', clearPlannerForm);
@@ -2333,6 +2749,11 @@
             document.getElementById('btn-clear-forecast-form').addEventListener('click', clearForecastForm);
             document.getElementById('forecast-table-body').addEventListener('click', handleForecastTableActions);
 
+            renderLinksUteisTable();
+            document.getElementById('links-uteis-form').addEventListener('submit', handleSaveLinkUtil);
+            document.getElementById('btn-clear-links-uteis-form').addEventListener('click', clearLinksUteisForm);
+            document.getElementById('links-uteis-table-body').addEventListener('click', handleLinksUteisTableActions);
+
             document.getElementById('users-table-body').addEventListener('click', (e) => {
                 if (e.target.classList.contains('update-user-btn')) handleUserUpdate(e.target.dataset.uid);
             });
@@ -2341,6 +2762,28 @@
                 if(e.target.files.length > 0) document.getElementById('restore-confirmation').classList.remove('hidden');
             });
             document.getElementById('btn-confirm-restore').addEventListener('click', handleRestore);
+        }
+
+        // NOVO: Função para salvar o período de captação
+        async function handleSaveCaptacaoConfig(e) {
+            e.preventDefault();
+            const form = e.target;
+            const dataInicio = form['config-data-inicio'].value;
+            const dataFim = form['config-data-fim'].value;
+
+            if (!dataInicio || !dataFim) {
+                showToast("Por favor, preencha ambas as datas.", true);
+                return;
+            }
+
+            try {
+                const configDocRef = doc(db, CAPTACAO_CONFIG_PATH, PERIODO_CONFIG_DOC_ID);
+                await setDoc(configDocRef, { dataInicio, dataFim }, { merge: true });
+                showToast('Período de captação salvo com sucesso!');
+            } catch (error) {
+                console.error("Erro ao salvar período:", error);
+                showToast('Erro ao salvar período.', true);
+            }
         }
 
         function renderUserRow(user) {
@@ -2640,6 +3083,91 @@
             } catch (error) {
                 console.error("Erro ao excluir dados de forecast:", error);
                 showToast('Erro ao excluir os dados de forecast.', true);
+            }
+        }
+
+        // --- Gerenciamento de Links Úteis ---
+        function renderLinksUteisTable() {
+            const tableBody = document.getElementById('links-uteis-table-body');
+            if (!tableBody) return;
+            const sortedData = [...linksUteisData].sort((a, b) => a.nome.localeCompare(b.nome));
+
+            if (sortedData.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="3" class="p-4 text-center text-gray-500">Nenhum link cadastrado.</td></tr>`;
+                return;
+            }
+            tableBody.innerHTML = sortedData.map(item => `
+                <tr data-item-id="${item.id}">
+                    <td class="p-4 font-medium">${item.nome}</td>
+                    <td class="p-4 text-blue-600 hover:underline"><a href="${item.url}" target="_blank">${item.url}</a></td>
+                    <td class="p-4 text-center space-x-2">
+                        <button class="edit-link-btn text-blue-600 hover:text-blue-800" data-item-id="${item.id}">Editar</button>
+                        <button class="delete-link-btn text-red-600 hover:text-red-800" data-item-id="${item.id}">Excluir</button>
+                    </td>
+                </tr>`).join('');
+        }
+
+        function clearLinksUteisForm() {
+            document.getElementById('links-uteis-form').reset();
+            document.getElementById('links-uteis-id').value = '';
+            document.getElementById('links-uteis-form-title').textContent = 'Adicionar Novo Link';
+        }
+
+        function handleLinksUteisTableActions(e) {
+            const itemId = e.target.dataset.itemId;
+            if (!itemId) return;
+
+            if (e.target.classList.contains('edit-link-btn')) {
+                const item = linksUteisData.find(d => d.id === itemId);
+                if (item) {
+                    document.getElementById('links-uteis-id').value = item.id;
+                    document.getElementById('link-nome').value = item.nome;
+                    document.getElementById('link-url').value = item.url;
+                    document.getElementById('links-uteis-form-title').textContent = 'Editar Link';
+                    document.getElementById('links-uteis-management-section').scrollIntoView({ behavior: 'smooth' });
+                }
+            } else if (e.target.classList.contains('delete-link-btn')) {
+                showConfirm('Tem certeza que deseja excluir este link?', () => {
+                    handleDeleteLinkUtil(itemId);
+                });
+            }
+        }
+
+        async function handleSaveLinkUtil(e) {
+            e.preventDefault();
+            const itemId = document.getElementById('links-uteis-id').value;
+            const data = {
+                nome: document.getElementById('link-nome').value,
+                url: document.getElementById('link-url').value,
+            };
+
+            if (!data.nome || !data.url) {
+                showToast("Nome e URL são obrigatórios.", true);
+                return;
+            }
+
+            try {
+                if (itemId) {
+                    await updateDoc(doc(db, LINKS_UTEIS_COLLECTION_PATH, itemId), data);
+                    showToast('Link atualizado com sucesso!');
+                } else {
+                    await addDoc(collection(db, LINKS_UTEIS_COLLECTION_PATH), data);
+                    showToast('Link adicionado com sucesso!');
+                }
+                clearLinksUteisForm();
+            } catch (error) {
+                console.error("Erro ao salvar link:", error);
+                showToast('Erro ao salvar o link.', true);
+            }
+        }
+
+        async function handleDeleteLinkUtil(itemId) {
+            try {
+                await deleteDoc(doc(db, LINKS_UTEIS_COLLECTION_PATH, itemId));
+                showToast('Link excluído com sucesso!');
+            } catch (error) {
+                console.error("Erro ao excluir link:", error);
+                showToast('Erro ao excluir o link.', true);
             }
         }
 
