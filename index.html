@@ -592,16 +592,26 @@
             const userDocRef = doc(db, USERS_COLLECTION_PATH, uid);
             const userDocSnap = await getDoc(userDocRef);
 
+            // Regra de Exceção: Forçar o perfil de marcos@angra.com para LÍDER/FDV
+            const isMarcosAdmin = email && email.toLowerCase() === 'marcos@angra.com';
+            let profileToReturn = {};
+
             if (userDocSnap.exists()) {
-                const data = userDocSnap.data();
-                // Verificação de robustez: se o cargo armazenado não for reconhecido, defina um padrão.
-                if (!Object.values(ROLES).includes(data.role)) {
-                    console.warn(`Cargo desconhecido '${data.role}' encontrado para o usuário ${uid}. Redefinindo para Promotor.`);
-                    data.role = ROLES.PROMOTOR;
-                    // Tenta corrigir o valor no Firestore
+                profileToReturn = userDocSnap.data();
+                
+                // 1. Aplica a regra de exceção e correção de cargo
+                if (isMarcosAdmin) {
+                    profileToReturn.role = ROLES.LIDER_FDV;
+                    // Força a atualização do Firestore para garantir que o perfil seja sempre LÍDER/FDV
+                    await setDoc(userDocRef, { ...profileToReturn, role: ROLES.LIDER_FDV }, { merge: true });
+                } else if (!Object.values(ROLES).includes(profileToReturn.role)) {
+                    // 2. Corrige cargos corrompidos para Promotor (regra de robustez)
+                    console.warn(`Cargo desconhecido '${profileToReturn.role}' encontrado para o usuário ${uid}. Redefinindo para Promotor.`);
+                    profileToReturn.role = ROLES.PROMOTOR;
                     await updateDoc(userDocRef, { role: ROLES.PROMOTOR });
                 }
-                return data;
+                
+                return profileToReturn;
 
             } else {
                 let isFirstUser = false;
@@ -614,13 +624,14 @@
                     isFirstUser = true; 
                 }
 
-                const newRole = isFirstUser ? ROLES.LIDER_FDV : ROLES.PROMOTOR;
-                const defaultName = email ? email.split('@')[0] : `user_${uid.substring(0, 6)}`;
+                // 3. Define o cargo inicial (LÍDER/FDV se primeiro usuário OU se for marcos@angra.com)
+                const newRole = isFirstUser || isMarcosAdmin ? ROLES.LIDER_FDV : ROLES.PROMOTOR;
+                const defaultName = name || (email ? email.split('@')[0] : `user_${uid.substring(0, 6)}`);
 
                 const newProfile = {
                     email: email,
                     role: newRole,
-                    name: name || defaultName,
+                    name: defaultName,
                     createdAt: serverTimestamp(),
                 };
                 await setDoc(userDocRef, newProfile);
