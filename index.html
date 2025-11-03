@@ -2825,7 +2825,7 @@
                     <div class="overflow-x-auto bg-white rounded-xl shadow-2xl border border-gray-100">
                         <table class="min-w-full divide-y divide-gray-200">
                             <thead class="bg-gray-100"><tr><th class="p-4 text-left text-xs font-medium text-gray-500 uppercase">Dia</th><th class="p-4 text-left text-xs font-medium text-gray-500 uppercase">Atendente</th><th class="p-4 text-left text-xs font-medium text-gray-500 uppercase">Base</th><th class="p-4 text-center text-xs font-medium text-gray-500 uppercase">Ações</th></tr></thead>
-                            <tbody id="planner-table-body" class="bg-white divide-y divide-gray-200"></tbody>
+                            <tbody id="planner-table-body"></tbody>
                         </table>
                     </div>
                 </div>
@@ -3039,13 +3039,15 @@
                     await updateDoc(doc(db, CAPTACCAO_PERIODOS_COLLECTION_PATH, id), data);
                     showToast('Período atualizado com sucesso!');
                 } else {
+                    // CORREÇÃO APLICADA AQUI: Adiciona o documento à coleção.
                     await addDoc(collection(db, CAPTACCAO_PERIODOS_COLLECTION_PATH), data);
                     showToast('Novo período salvo com sucesso!');
                 }
                 clearPeriodoForm();
             } catch (error) {
                 console.error("Erro ao salvar período:", error);
-                showToast('Erro ao salvar período.', true);
+                // Retorna uma mensagem de erro mais detalhada
+                showToast(`Erro ao salvar período. Detalhe: ${error.message}`, true);
             }
         }
 
