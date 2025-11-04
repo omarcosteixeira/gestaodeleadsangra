@@ -240,7 +240,7 @@
             'controle-bases': [ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV],
             'campanhas': [ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV],
             'gap':       [ROLES.SALA_MATRICULA, ROLES.LIDER_FDV],
-            'admin':     [ROLES.LIDER_FDV] 
+            'admin':     [ROLES.LIDER_FDV, ROLES.SALA_MATRICULA] // Adicionado SALA_MATRICULA
         };
 
         // --- Helpers de UI e Formatação ---
@@ -411,6 +411,9 @@
                 const app = initializeApp(firebaseConfig);
                 auth = getAuth(app);
                 db = getFirestore(app);
+                
+                // --- ATIVA O LOGGING PARA AJUDAR NO DEBUGGING DE REGRAS ---
+                setLogLevel('debug');
 
                 let customTokenAttempted = false;
 
@@ -446,6 +449,7 @@
         }
         
         async function handleUserLogin(user) {
+            // Buscamos o perfil do usuário imediatamente após o login
             const userProfile = await fetchUserProfile(user.uid, user.email);
             currentUser = { uid: user.uid, email: user.email, ...userProfile };
             isAuthReady = true;
@@ -464,7 +468,7 @@
             document.getElementById('footer-content').innerText = "Sistema de Gestão de Leads | Criado por Marcos Teixeira";
             
             renderNav();
-            setupDataListeners();
+            setupDataListeners(); // Configura os listeners agora que o currentUser está pronto
 
             let initialView = 'cadastro';
             if (canView('dashboard')) {
@@ -476,6 +480,7 @@
         function handleUserLogout() {
             currentUser = null;
             isAuthReady = false;
+            // Limpa dados e listeners
             leadsData = [];
             usersData = [];
             gapData = [];
@@ -514,7 +519,7 @@
                     const allUsersSnapshot = await getDocs(usersQuery);
                     isFirstUser = allUsersSnapshot.empty;
                 } catch (error) {
-                    console.warn("Could not query users collection to determine role.", error);
+                    console.warn("Could not query users collection to determine role. Defaulting to first user logic.", error);
                     isFirstUser = true; 
                 }
 
@@ -591,17 +596,21 @@
         // --- 2. Listeners de Dados ---
         function setupDataListeners() {
             if (!db || !currentUser || !isAuthReady) {
-                console.warn("A configuração dos listeners de dados foi abortada: a autenticação não está pronta.");
+                console.warn("A configuração dos listeners de dados foi abortada: a autenticação não está pronta ou o perfil está ausente.");
                 return;
             }
             
+            // 1. USERS Listener: Necessário para obter perfis atualizados (especialmente para FDV e Admin)
             const usersQuery = query(collection(db, USERS_COLLECTION_PATH));
             unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
                 usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                
+                // Verifica se o perfil do usuário logado mudou (se o Líder o atualizou)
                 const myProfile = usersData.find(u => u.id === currentUser.uid);
                 if (myProfile && (myProfile.role !== currentUser.role || myProfile.name !== currentUser.name)) {
                     currentUser = { ...currentUser, ...myProfile };
-                    renderNav();
+                    renderNav(); // Re-renderiza navegação para atualizar permissões
+                    // Atualiza display de usuário
                     document.getElementById('user-info-display').innerHTML = `
                         <div class="flex items-center space-x-2">
                             <i class="gg-user"></i>
@@ -609,33 +618,21 @@
                             <span class="text-xs bg-blue-500 px-2 py-0.5 rounded-full">${currentUser.role}</span>
                         </div>`;
                 }
+                
+                // RE-RUN leads listener if the user profile just changed (e.g., FDV needs PROMOTER list)
+                if (currentUser.role === ROLES.FDV) {
+                    // É importante re-configurar o leads listener se os dados dos usuários mudarem
+                    // para atualizar a lista de promotores que o FDV pode ver.
+                    setupLeadsListener(); 
+                }
+
                 if (['admin', 'historico', 'cadastro', 'controle-bases'].includes(currentView)) renderView(currentView);
             }, (error) => console.error("Erro ao ouvir utilizadores:", error));
 
-            let leadsQuery;
-            const userRole = currentUser.role;
+            // Configura o listener de Leads imediatamente após o login, ou após a primeira atualização de USERS (para FDV).
+            setupLeadsListener();
 
-            if (userRole === ROLES.LIDER_FDV || userRole === ROLES.SALA_MATRICULA || userRole === ROLES.QG) {
-                leadsQuery = query(collection(db, LEADS_COLLECTION_PATH));
-            } else if (userRole === ROLES.FDV) {
-                const promoterIds = usersData.filter(user => user.role === ROLES.PROMOTOR).map(user => user.id);
-                const allowedIds = [...promoterIds, currentUser.uid];
-                if (allowedIds.length > 0) {
-                     leadsQuery = query(collection(db, LEADS_COLLECTION_PATH), where("promotorId", "in", allowedIds));
-                }
-            } else if (userRole === ROLES.PROMOTOR) {
-                leadsQuery = query(collection(db, LEADS_COLLECTION_PATH), where("promotorId", "==", currentUser.uid));
-            }
-
-            if(leadsQuery) {
-                unsubscribeLeads = onSnapshot(leadsQuery, (snapshot) => {
-                    leadsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    if (['dashboard', 'historico', 'cadastro'].includes(currentView)) {
-                        renderView(currentView);
-                    }
-                }, (error) => console.error("Erro ao ouvir leads:", error));
-            }
-            
+            // Configuração dos demais listeners (restritos por permissão)
             if (canView('bases')) {
                 const basesQuery = query(collection(db, BASES_COLLECTION_PATH));
                 unsubscribeBases = onSnapshot(basesQuery, (snapshot) => {
@@ -668,6 +665,7 @@
                 }, (error) => console.error("Erro ao ouvir GAP:", error));
             }
 
+            // Listeners para o Dashboard/Admin (geralmente visíveis para todos ou líderes)
             if (canView('dashboard') || canView('admin')) {
                 const linksUteisQuery = query(collection(db, LINKS_UTEIS_COLLECTION_PATH));
                 unsubscribeLinksUteis = onSnapshot(linksUteisQuery, (snapshot) => {
@@ -701,7 +699,6 @@
                     }
                 }, (error) => console.error("Erro ao ouvir Forecast Captação:", error));
 
-                // NOVO: Listener para Configuração do Período de Captação
                 const configDocRef = doc(db, CAPTACAO_CONFIG_PATH, PERIODO_CONFIG_DOC_ID);
                 unsubscribeCaptacaoConfig = onSnapshot(configDocRef, (docSnap) => {
                     if (docSnap.exists()) {
@@ -713,6 +710,47 @@
                         renderView(currentView);
                     }
                 }, (error) => console.error("Erro ao ouvir config de captação:", error));
+            }
+        }
+        
+        // FUNÇÃO DEDICADA PARA O LISTENER DE LEADS (chamado após a autenticação e no update de users)
+        function setupLeadsListener() {
+            unsubscribeLeads(); // Limpa o listener anterior
+            
+            if (!currentUser || !currentUser.role) return;
+
+            let leadsQuery;
+            const userRole = currentUser.role;
+
+            if (userRole === ROLES.LIDER_FDV || userRole === ROLES.SALA_MATRICULA || userRole === ROLES.QG) {
+                // Líderes e QG veem todos os leads
+                leadsQuery = query(collection(db, LEADS_COLLECTION_PATH));
+            } else if (userRole === ROLES.FDV) {
+                // FDV vê leads de todos os promotores E os seus próprios (mas como a regra do Firestore 
+                // não suporta o filtro 'in' dinâmico, confiamos na regra de segurança para READ ALL,
+                // mas a query só funciona se for para leads do próprio FDV ou ALL).
+                // No entanto, o código original tentava usar a cláusula 'in'.
+                // Para evitar erros de permissão baseados em query, vamos manter a query simples
+                // e confiar que as regras do Firestore permitirão a leitura correta.
+                
+                // A regra de segurança do Firestore deve permitir que o FDV leia todos.
+                // Aqui no frontend, mantemos a query para ALL para Líderes, e para PROMOTOR, 
+                // mantemos o filtro para o próprio ID.
+                leadsQuery = query(collection(db, LEADS_COLLECTION_PATH)); 
+                
+            } else if (userRole === ROLES.PROMOTOR) {
+                // Promotor vê apenas os seus
+                leadsQuery = query(collection(db, LEADS_COLLECTION_PATH), where("promotorId", "==", currentUser.uid));
+            }
+            
+            // SOMENTE anexa o listener se leadsQuery foi definido.
+            if(leadsQuery) {
+                unsubscribeLeads = onSnapshot(leadsQuery, (snapshot) => {
+                    leadsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    if (['dashboard', 'historico', 'cadastro'].includes(currentView)) {
+                        renderView(currentView);
+                    }
+                }, (error) => console.error("Erro ao ouvir leads:", error));
             }
         }
         
@@ -1313,8 +1351,11 @@
             
             let promotors = [];
             if (currentUser.role === ROLES.FDV) {
-                promotors = usersData.filter(u => u.role === ROLES.PROMOTOR || u.id === currentUser.uid).map(u => u.name);
+                // Para FDV, mostramos todos os promotores (incluindo ele mesmo se tiver leads)
+                const allUserNames = [...new Map(usersData.map(user => [user.id, user.name])).values()].filter(Boolean).sort();
+                promotors = allUserNames;
             } else {
+                // Para Líderes, mostramos todos os nomes
                 promotors = [...new Map(usersData.map(user => [user.id, user.name])).values()].filter(Boolean).sort();
             }
 
@@ -1397,11 +1438,15 @@
             return leadsData.filter(lead => {
                 if (leadFilterState.acao && lead.acao !== leadFilterState.acao) return false;
                 if (leadFilterState.dia) {
-                    const [year, month, day] = leadFilterState.dia.split('-').map(Number);
                     if (!lead.createdAt) return false;
+                    
+                    const [year, month, day] = leadFilterState.dia.split('-').map(Number);
                     const leadDate = lead.createdAt.toDate();
+                    
+                    // Compara ano, mês e dia da data do lead com a data do filtro
                     if (leadDate.getFullYear() !== year || (leadDate.getMonth() + 1) !== month || leadDate.getDate() !== day) return false;
                 }
+                
                 if (leadFilterState.promotorId && lead.promotorName !== leadFilterState.promotorId) return false;
                 if (leadFilterState.telefone && (!lead.telefone || !lead.telefone.includes(leadFilterState.telefone))) return false;
                 if (leadFilterState.curso && lead.cursoInteresse !== leadFilterState.curso) return false;
@@ -2293,7 +2338,7 @@
             
             if(e.target.classList.contains('edit-campanha-btn')) {
                 const item = campanhasData.find(d => d.id === id);
-                if(item) {
+                if (item) {
                     const form = document.getElementById('campanha-form');
                     form['campanha-id'].value = item.id;
                     form['campanha-nome'].value = item.nome;
@@ -2787,7 +2832,7 @@
         }
 
         function renderUserRow(user) {
-            const isEditable = currentUser.role === ROLES.LIDER_FDV && user.id !== currentUser.uid;
+            const isEditable = (currentUser.role === ROLES.LIDER_FDV || currentUser.role === ROLES.SALA_MATRICULA) && user.id !== currentUser.uid;
             return `
                 <tr class="hover:bg-blue-50">
                     <td class="p-4"><input type="text" value="${user.name || ''}" class="name-input bg-gray-50 border rounded p-1 w-full" data-uid="${user.id}" ${!isEditable ? 'disabled' : ''}></td>
@@ -3180,6 +3225,3 @@
     </script>
 </body>
 </html>
-
-
-
