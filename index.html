@@ -619,18 +619,16 @@
                         </div>`;
                 }
                 
-                // RE-RUN leads listener if the user profile just changed (e.g., FDV needs PROMOTER list)
-                if (currentUser.role === ROLES.FDV) {
-                    // É importante re-configurar o leads listener se os dados dos usuários mudarem
-                    // para atualizar a lista de promotores que o FDV pode ver.
-                    setupLeadsListener(); 
-                }
-
+                // O listener de Leads precisa ser reconfigurado se o perfil FDV estiver ativo, 
+                // pois ele pode depender da lista de promotores que acabamos de receber.
+                setupLeadsListener(); 
+                
                 if (['admin', 'historico', 'cadastro', 'controle-bases'].includes(currentView)) renderView(currentView);
             }, (error) => console.error("Erro ao ouvir utilizadores:", error));
 
             // Configura o listener de Leads imediatamente após o login, ou após a primeira atualização de USERS (para FDV).
-            setupLeadsListener();
+            // A chamada acima no callback do onSnapshot garante que ele rode novamente se o usersData mudar.
+            // setupLeadsListener(); // Removida daqui para evitar chamada dupla e garantir que rode após receber usersData
 
             // Configuração dos demais listeners (restritos por permissão)
             if (canView('bases')) {
@@ -722,22 +720,11 @@
             let leadsQuery;
             const userRole = currentUser.role;
 
-            if (userRole === ROLES.LIDER_FDV || userRole === ROLES.SALA_MATRICULA || userRole === ROLES.QG) {
-                // Líderes e QG veem todos os leads
+            // Perfis com visualização total (Líderes, Sala de Matrícula, QG e FDV)
+            if (userRole === ROLES.LIDER_FDV || userRole === ROLES.SALA_MATRICULA || userRole === ROLES.QG || userRole === ROLES.FDV) {
+                // Query para buscar TUDO, confiando nas Regras de Segurança para aplicar as restrições corretas
+                // (por exemplo, o FDV terá a leitura limitada pelas Rules a leads de promotores/ele mesmo)
                 leadsQuery = query(collection(db, LEADS_COLLECTION_PATH));
-            } else if (userRole === ROLES.FDV) {
-                // FDV vê leads de todos os promotores E os seus próprios (mas como a regra do Firestore 
-                // não suporta o filtro 'in' dinâmico, confiamos na regra de segurança para READ ALL,
-                // mas a query só funciona se for para leads do próprio FDV ou ALL).
-                // No entanto, o código original tentava usar a cláusula 'in'.
-                // Para evitar erros de permissão baseados em query, vamos manter a query simples
-                // e confiar que as regras do Firestore permitirão a leitura correta.
-                
-                // A regra de segurança do Firestore deve permitir que o FDV leia todos.
-                // Aqui no frontend, mantemos a query para ALL para Líderes, e para PROMOTOR, 
-                // mantemos o filtro para o próprio ID.
-                leadsQuery = query(collection(db, LEADS_COLLECTION_PATH)); 
-                
             } else if (userRole === ROLES.PROMOTOR) {
                 // Promotor vê apenas os seus
                 leadsQuery = query(collection(db, LEADS_COLLECTION_PATH), where("promotorId", "==", currentUser.uid));
