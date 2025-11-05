@@ -159,7 +159,7 @@
             where,
             deleteDoc,
             setLogLevel,
-            orderBy // Adicionando orderBy para consultas mais robustas
+            orderBy 
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Variáveis de Configuração e Globais ---
@@ -248,7 +248,7 @@
             'admin':     [ROLES.LIDER_FDV, ROLES.SALA_MATRICULA] 
         };
 
-        // --- Helpers de UI e Formatação ---
+        // --- Helpers de UI e Formatação (DEFINIÇÃO ÚNICA) ---
         const formatCpf = (cpf) => cpf ? String(cpf).replace(/\D/g, '') : '';
         const formatPhone = (phone) => phone ? String(phone).replace(/\D/g, '') : '';
         const formatDate = (timestamp) => {
@@ -487,7 +487,6 @@
             currentUser = null;
             isAuthReady = false;
             // Limpa dados e listeners
-            isAuthReady = false;
             leadsData = [];
             usersData = [];
             gapData = [];
@@ -733,7 +732,6 @@
                 console.log(`[LEADS QUERY] Buscando todos os leads para o perfil: ${userRole}`);
             } else if (userRole === ROLES.PROMOTOR) {
                 // Promotor vê apenas os seus, ordenado por criação.
-                // IMPORTANTE: Esta query com where() e orderBy() requer um índice no Firebase.
                 leadsQuery = query(collection(db, LEADS_COLLECTION_PATH), where("promotorId", "==", currentUser.uid), orderBy("createdAt", "desc"));
                 console.log(`[LEADS QUERY] Buscando leads por Promotor ID: ${currentUser.uid}`);
             }
@@ -1129,58 +1127,6 @@
             el.classList.add(isError ? 'bg-red-100' : 'bg-green-100', isError ? 'text-red-700' : 'text-green-700');
         }
 
-        // --- UI Helper Function Definitions (Global) ---
-        function renderInputField(label, name, type, required, placeholder, iconHTML = '') {
-            return `
-                <div>
-                    <label for="${name}" class="block text-sm font-medium text-gray-700 flex items-center">
-                        ${iconHTML ? iconHTML.replace('h-5 w-5', 'h-4 w-4').replace('mr-2 inline-block', 'mr-1 text-blue-500') : ''}
-                        ${label}
-                        ${required ? '<span class="ml-1 text-red-500">*</span>' : ''}
-                    </label>
-                    <div class="mt-1">
-                        <input type="${type}" name="${name}" id="${name}" ${required ? 'required' : ''} placeholder="${placeholder}" class="block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-blue-500 focus:border-blue-500">
-                    </div>
-                </div>`;
-        }
-
-        function renderFilterInput(label, name, currentValue, iconHTML, placeholder) { 
-            return `<div>
-                        <label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">${iconHTML.replace('h-5 w-5','h-4 w-4').replace('mr-2 inline-block','mr-1 text-blue-500')} ${label}</label>
-                        <input type="text" name="${name}" id="${name}" value="${currentValue}" placeholder="${placeholder}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border"/>
-                    </div>`; 
-        }
-
-        function renderSelectField(label, name, options, required, iconHTML = '') {
-            return `
-                <div>
-                    <label for="${name}" class="block text-sm font-medium text-gray-700 flex items-center">
-                        ${iconHTML ? iconHTML.replace('h-5 w-5', 'h-4 w-4').replace('mr-2 inline-block', 'mr-1 text-blue-500') : ''}
-                        ${label}
-                        ${required ? '<span class="ml-1 text-red-500">*</span>' : ''}
-                    </label>
-                    <div class="mt-1">
-                        <select id="${name}" name="${name}" ${required ? 'required' : ''} class="block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-blue-500 focus:border-blue-500">
-                           <option value="">-- Selecione --</option>
-                           ${options.map(opt => `<option value="${opt}">${opt}</option>`).join('')}
-                        </select>
-                    </div>
-                </div>`;
-        }
-        
-        function renderFilterSelectCustom(label, name, options, currentValue, iconHTML) {
-            const isAll = currentValue === 'all' || currentValue === '';
-             return `<div><label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">${iconHTML.replace('h-5 w-5','h-4 w-4').replace('mr-2 inline-block','mr-1 text-blue-500')} ${label}</label>
-             <select id="${name}" name="${name}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border">
-                <option value="all" ${isAll ? 'selected' : ''}>-- Todos --</option>
-                ${options.map(opt => `<option value="${opt.value}" ${opt.value === currentValue ? 'selected' : ''}>${opt.label}</option>`).join('')}
-             </select></div>`;
-        }
-
-        function renderFilterDate(label, name, currentValue, iconHTML) { 
-            return `<div><label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">${iconHTML.replace('h-5 w-5','h-4 w-4').replace('mr-2 inline-block','mr-1 text-blue-500')} ${label}</label><input type="date" name="${name}" id="${name}" value="${currentValue}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border"/></div>`; 
-        }
-        
         // --- 4. Cadastro de Leads ---
         function renderRegistration() {
             const formContainer = document.getElementById('view-cadastro');
@@ -1222,6 +1168,37 @@
                 </div>`;
             document.getElementById('lead-form').addEventListener('submit', handleSaveLead);
             document.getElementById('btn-import-file').addEventListener('click', handleFileImport);
+        }
+        
+        function renderInputField(label, name, type, required, placeholder, iconHTML = '') {
+            return `
+                <div>
+                    <label for="${name}" class="block text-sm font-medium text-gray-700 flex items-center">
+                        ${iconHTML ? iconHTML.replace('h-5 w-5', 'h-4 w-4').replace('mr-2 inline-block', 'mr-1 text-blue-500') : ''}
+                        ${label}
+                        ${required ? '<span class="ml-1 text-red-500">*</span>' : ''}
+                    </label>
+                    <div class="mt-1">
+                        <input type="${type}" name="${name}" id="${name}" ${required ? 'required' : ''} placeholder="${placeholder}" class="block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                </div>`;
+        }
+
+        function renderSelectField(label, name, options, required, iconHTML = '') {
+            return `
+                <div>
+                    <label for="${name}" class="block text-sm font-medium text-gray-700 flex items-center">
+                        ${iconHTML ? iconHTML.replace('h-5 w-5', 'h-4 w-4').replace('mr-2 inline-block', 'mr-1 text-blue-500') : ''}
+                        ${label}
+                        ${required ? '<span class="ml-1 text-red-500">*</span>' : ''}
+                    </label>
+                    <div class="mt-1">
+                        <select id="${name}" name="${name}" ${required ? 'required' : ''} class="block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-blue-500 focus:border-blue-500">
+                           <option value="">-- Selecione --</option>
+                           ${options.map(opt => `<option value="${opt}">${opt}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>`;
         }
         
         async function handleSaveLead(e) {
@@ -2097,13 +2074,15 @@
                     <div class="lg:col-span-2">
                          <h3 class="text-xl font-bold text-gray-800 mb-2">Filtros e Visualização</h3>
                         <div id="campanha-filters-container" class="bg-white p-6 rounded-xl shadow-lg border mb-8"></div>
-                        <div id="campanha-blocks-container"></div>
+                        <div id="campanha-blocks-container">
+                            <!-- Campanhas serão renderizadas em blocos aqui -->
+                        </div>
                     </div>
                 </div>
             `;
             renderCampanhasRegistrationForm();
             renderCampanhasFilters();
-            renderCampanhasBlocks(); // Chamando a nova função de renderização em blocos
+            renderCampanhasBlocks(); // Chamada da nova função de renderização em blocos
         }
 
         function renderCampanhasRegistrationForm() {
@@ -2179,7 +2158,6 @@
             }).sort((a,b) => new Date(b.dataInicio) - new Date(a.dataInicio));
         }
         
-        // NOVO: Função para renderizar as campanhas em blocos/cards
         function renderCampanhasBlocks() {
             const container = document.getElementById('campanha-blocks-container');
             const data = filterCampanhasData();
@@ -2187,7 +2165,7 @@
             let blocksHTML = '<div class="grid grid-cols-1 md:grid-cols-2 gap-6">';
             
             if (data.length === 0) {
-                blocksHTML = `<div class="bg-white p-6 rounded-xl shadow-lg border text-center text-gray-500">Nenhuma campanha encontrada com os filtros atuais.</div>`;
+                blocksHTML += `<div class="col-span-full bg-white p-6 rounded-xl shadow-lg border text-center text-gray-500">Nenhuma campanha encontrada com os filtros atuais.</div>`;
             } else {
                 const hoje = new Date();
                 hoje.setHours(0,0,0,0);
@@ -2197,47 +2175,45 @@
                     const isVigente = hoje <= fim;
                     
                     let statusHtml = '';
-                    let borderColor = 'border-orange-500';
+                    let statusColor = '';
 
                     if(isVigente) {
                         const diasRestantes = calculateWeekdays(hoje, fim);
-                        statusHtml = `<span class="px-3 py-1 font-semibold rounded-full text-xs bg-green-100 text-green-800">Vigente (${diasRestantes} dias)</span>`;
-                        borderColor = 'border-green-500';
+                        statusHtml = `Vigente (${diasRestantes} dias)`;
+                        statusColor = 'bg-green-600';
                     } else {
-                        statusHtml = `<span class="px-3 py-1 font-semibold rounded-full text-xs bg-red-100 text-red-800">Finalizada</span>`;
-                        borderColor = 'border-gray-400';
+                        statusHtml = `Finalizada`;
+                        statusColor = 'bg-red-600';
                     }
                     
                     blocksHTML += `
-                        <div class="bg-white p-6 rounded-xl shadow-lg border-t-4 ${borderColor}" data-id="${item.id}">
-                            <div class="flex justify-between items-start mb-3">
-                                <h3 class="font-extrabold text-lg text-gray-800">${item.nome}</h3>
-                                ${statusHtml}
+                        <div class="bg-white p-6 rounded-xl shadow-2xl border-t-4 border-orange-500 flex flex-col justify-between" data-id="${item.id}">
+                            <div>
+                                <div class="flex justify-between items-start mb-3">
+                                    <h3 class="text-xl font-extrabold text-gray-800">${item.nome}</h3>
+                                    <span class="px-3 py-1 text-xs font-semibold rounded-full text-white ${statusColor}">${statusHtml}</span>
+                                </div>
+                                <p class="text-gray-600 mb-4">${item.descricao}</p>
+                                <div class="text-sm text-gray-500 mb-4">
+                                    <p class="flex items-center space-x-2">${ICONS.CALENDAR.replace('h-5 w-5', 'h-4 w-4')} <span>Início: ${formatDateForInput(item.dataInicio)}</span></p>
+                                    <p class="flex items-center space-x-2">${ICONS.CALENDAR.replace('h-5 w-5', 'h-4 w-4')} <span>Fim: ${formatDateForInput(item.dataFim)}</span></p>
+                                </div>
                             </div>
-                            <p class="text-sm text-gray-600 mb-4">${item.descricao}</p>
-                            
-                            <div class="text-xs text-gray-500 mb-4">
-                                <p class="flex items-center space-x-1">${ICONS.CALENDAR.replace('h-5 w-5', 'h-4 w-4').replace('mr-2 inline-block', 'mr-1')}<span>Período: ${formatDateForInput(item.dataInicio)} - ${formatDateForInput(item.dataFim)}</span></p>
-                                ${item.link ? `<p class="flex items-center space-x-1 mt-1 text-blue-600">${ICONS.LINK.replace('h-5 w-5', 'h-4 w-4').replace('mr-2 inline-block', 'mr-1')} <a href="${item.link}" target="_blank" class="hover:underline">Regulamento</a></p>` : ''}
-                            </div>
-
-                            <div class="flex justify-end space-x-2 border-t pt-3 mt-3">
-                                <button class="edit-campanha-btn text-blue-600 hover:text-blue-800 font-semibold text-sm" data-id="${item.id}">Editar</button>
-                                <button class="delete-campanha-btn text-red-600 hover:text-red-800 font-semibold text-sm" data-id="${item.id}">Excluir</button>
+                            <div class="flex justify-end space-x-3 pt-4 border-t border-gray-100">
+                                ${item.link ? `<a href="${item.link}" target="_blank" class="text-blue-600 hover:text-blue-800 flex items-center text-sm">
+                                    ${ICONS.LINK.replace('h-5 w-5', 'h-4 w-4')} Regulamento
+                                </a>` : ''}
+                                <button class="edit-campanha-btn text-blue-600 hover:text-blue-800 text-sm font-semibold" data-id="${item.id}">Editar</button>
+                                <button class="delete-campanha-btn text-red-600 hover:text-red-800 text-sm font-semibold" data-id="${item.id}">Excluir</button>
                             </div>
                         </div>
                     `;
                 });
-                blocksHTML += '</div>';
             }
-            
-            container.innerHTML = blocksHTML;
-            container.addEventListener('click', handleCampanhaTableActions); // O nome da função de handler permanece o mesmo
-        }
+            blocksHTML += '</div>';
 
-        // Renomeada a função de tabela para Blocks para refletir a mudança
-        function renderCampanhasTable() {
-             renderCampanhasBlocks();
+            container.innerHTML = blocksHTML;
+            container.addEventListener('click', handleCampanhaTableActions); // Mantendo o mesmo handler para ações
         }
         
         async function handleSaveCampanha(e) {
