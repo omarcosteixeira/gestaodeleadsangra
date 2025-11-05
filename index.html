@@ -158,8 +158,7 @@
             writeBatch,
             where,
             deleteDoc,
-            setLogLevel,
-            orderBy 
+            setLogLevel 
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Variáveis de Configuração e Globais ---
@@ -248,7 +247,7 @@
             'admin':     [ROLES.LIDER_FDV, ROLES.SALA_MATRICULA] 
         };
 
-        // --- Helpers de UI e Formatação (DEFINIÇÃO ÚNICA) ---
+        // --- Helpers de UI e Formatação ---
         const formatCpf = (cpf) => cpf ? String(cpf).replace(/\D/g, '') : '';
         const formatPhone = (phone) => phone ? String(phone).replace(/\D/g, '') : '';
         const formatDate = (timestamp) => {
@@ -295,7 +294,7 @@
             DATABASE: generateIcon('<ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>'),
             BOOKMARK: generateIcon('<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>'),
             CLOSE: generateIcon('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'),
-            BRIEFCASE: generateIcon('<path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>'),
+            BRIEFCASE: generateIcon('<rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>'),
             LINK: generateIcon('<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>'),
         };
         
@@ -631,37 +630,32 @@
             }, (error) => console.error("Erro ao ouvir utilizadores:", error));
 
             // Configuração dos demais listeners (restritos por permissão)
-            
-            // BASES: Adicionando orderBy para robustez
             if (canView('bases')) {
-                const basesQuery = query(collection(db, BASES_COLLECTION_PATH), orderBy("createdAt", "desc"));
+                const basesQuery = query(collection(db, BASES_COLLECTION_PATH));
                 unsubscribeBases = onSnapshot(basesQuery, (snapshot) => {
                     basesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     if (currentView === 'bases') renderView('bases');
                 }, (error) => console.error("Erro ao ouvir bases:", error));
             }
             
-            // CONTROLE BASES: Adicionando orderBy
             if (canView('controle-bases')) {
-                const controleBasesQuery = query(collection(db, CONTROLE_BASES_COLLECTION_PATH), orderBy("dataEntrada", "desc"));
+                const controleBasesQuery = query(collection(db, CONTROLE_BASES_COLLECTION_PATH));
                 unsubscribeControleBases = onSnapshot(controleBasesQuery, (snapshot) => {
                     controleBasesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     if (currentView === 'controle-bases') renderView('controle-bases');
                 }, (error) => console.error("Erro ao ouvir controle de bases:", error));
             }
             
-            // CAMPANHAS: Adicionando orderBy
             if (canView('campanhas')) {
-                const campanhasQuery = query(collection(db, CAMPANHAS_COLLECTION_PATH), orderBy("dataInicio", "desc"));
+                const campanhasQuery = query(collection(db, CAMPANHAS_COLLECTION_PATH));
                 unsubscribeCampanhas = onSnapshot(campanhasQuery, (snapshot) => {
                     campanhasData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     if (currentView === 'campanhas') renderView('campanhas');
                 }, (error) => console.error("Erro ao ouvir campanhas:", error));
             }
 
-            // GAP: Adicionando orderBy
             if (canView('gap')) {
-                const gapQuery = query(collection(db, GAP_COLLECTION_PATH), orderBy("createdAt", "desc"));
+                const gapQuery = query(collection(db, GAP_COLLECTION_PATH));
                 unsubscribeGap = onSnapshot(gapQuery, (snapshot) => {
                     gapData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     if (currentView === 'gap') renderView('gap');
@@ -727,12 +721,12 @@
 
             // Perfis com visualização total ou ampla (Líderes, Sala de Matrícula, QG e FDV)
             if (userRole === ROLES.LIDER_FDV || userRole === ROLES.SALA_MATRICULA || userRole === ROLES.QG || userRole === ROLES.FDV) {
-                // Busca TUDO com ordenação por criação.
-                leadsQuery = query(collection(db, LEADS_COLLECTION_PATH), orderBy("createdAt", "desc"));
+                // Busca TUDO. A restrição de FDV é feita pelas regras de segurança.
+                leadsQuery = query(collection(db, LEADS_COLLECTION_PATH));
                 console.log(`[LEADS QUERY] Buscando todos os leads para o perfil: ${userRole}`);
             } else if (userRole === ROLES.PROMOTOR) {
-                // Promotor vê apenas os seus, ordenado por criação.
-                leadsQuery = query(collection(db, LEADS_COLLECTION_PATH), where("promotorId", "==", currentUser.uid), orderBy("createdAt", "desc"));
+                // Promotor vê apenas os seus
+                leadsQuery = query(collection(db, LEADS_COLLECTION_PATH), where("promotorId", "==", currentUser.uid));
                 console.log(`[LEADS QUERY] Buscando leads por Promotor ID: ${currentUser.uid}`);
             }
             
@@ -896,7 +890,6 @@
                                 <td class="p-2 text-left font-medium">META DIA</td>
                                 <td>${formatNum(item.metaDia.insc)}</td>
                                 <td>${formatNum(item.metaDia.matFin)}</td>
-                                
                                 <td>${formatNum(item.metaDia.matAcad)}</td>
                             </tr>
                             <tr class="text-gray-500">
@@ -1391,6 +1384,89 @@
             document.getElementById('btn-clear-lead-filters').addEventListener('click', handleClearLeadFilters);
             document.getElementById('btn-export-excel').addEventListener('click', handleExportToExcel);
             renderLeadsTable();
+        }
+        
+        function renderFilterInput(label, name, currentValue, iconHTML, placeholder) { 
+            return `<div>
+                        <label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">${iconHTML.replace('h-5 w-5','h-4 w-4').replace('mr-2 inline-block','mr-1 text-blue-500')} ${label}</label>
+                        <input type="text" name="${name}" id="${name}" value="${currentValue}" placeholder="${placeholder}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border"/>
+                    </div>`; 
+        }
+
+        function renderFilterSelect(label, name, options, currentValue, iconHTML) { 
+            const isAll = currentValue === 'all' || currentValue === '';
+            return `<div><label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">${iconHTML.replace('h-5 w-5','h-4 w-4').replace('mr-2 inline-block','mr-1 text-blue-500')} ${label}</label><select id="${name}" name="${name}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border"><option value="all" ${isAll ? 'selected' : ''}>-- Todos --</option>${options.map(opt => `<option value="${opt}" ${opt === currentValue ? 'selected' : ''}>${opt}</option>`).join('')}</select></div>`; 
+        }
+        
+        // NOVO: Helper para filtros com valor e texto diferentes (ex: Sim/Não)
+        function renderFilterSelectCustom(label, name, options, currentValue, iconHTML) {
+            const isAll = currentValue === 'all' || currentValue === '';
+             return `<div><label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">${iconHTML.replace('h-5 w-5','h-4 w-4').replace('mr-2 inline-block','mr-1 text-blue-500')} ${label}</label>
+             <select id="${name}" name="${name}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border">
+                <option value="all" ${isAll ? 'selected' : ''}>-- Todos --</option>
+                ${options.map(opt => `<option value="${opt.value}" ${opt.value === currentValue ? 'selected' : ''}>${opt.label}</option>`).join('')}
+             </select></div>`;
+        }
+
+        function renderFilterDate(label, name, currentValue, iconHTML) { 
+            return `<div><label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">${iconHTML.replace('h-5 w-5','h-4 w-4').replace('mr-2 inline-block','mr-1 text-blue-500')} ${label}</label><input type="date" name="${name}" id="${name}" value="${currentValue}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border"/></div>`; 
+        }
+
+        function handleLeadFilterChange(name, value) {
+            leadFilterState[name] = value;
+            renderLeadsTable();
+        }
+
+        function handleClearLeadFilters() {
+            leadFilterState = { acao: '', dia: '', promotorId: '', status: 'all', telefone: '', curso: '' };
+            renderHistory();
+        }
+
+        function filterLeads() {
+            return leadsData.filter(lead => {
+                if (leadFilterState.acao && lead.acao !== leadFilterState.acao) return false;
+                if (leadFilterState.dia) {
+                    if (!lead.createdAt) return false;
+                    
+                    const [year, month, day] = leadFilterState.dia.split('-').map(Number);
+                    const leadDate = lead.createdAt.toDate();
+                    
+                    // Compara ano, mês e dia da data do lead com a data do filtro
+                    if (leadDate.getFullYear() !== year || (leadDate.getMonth() + 1) !== month || leadDate.getDate() !== day) return false;
+                }
+                
+                if (leadFilterState.promotorId && lead.promotorName !== leadFilterState.promotorId) return false;
+                if (leadFilterState.telefone && (!lead.telefone || !lead.telefone.includes(leadFilterState.telefone))) return false;
+                if (leadFilterState.curso && lead.cursoInteresse !== leadFilterState.curso) return false;
+                
+                const currentStatus = lead.status || (lead.converted ? 'Convertido' : 'Pendente');
+                if (leadFilterState.status !== 'all' && currentStatus !== leadFilterState.status) return false;
+                
+                return true;
+            }).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+        }
+
+        function handleExportToExcel() {
+            const leadsToExport = filterLeads();
+            if (leadsToExport.length === 0) {
+                showToast("Nenhum lead para exportar.", true);
+                return;
+            }
+            const dataForSheet = leadsToExport.map(lead => ({
+                'Ação': lead.acao,
+                'Nome Completo': lead.nome,
+                'Telefone': lead.telefone,
+                'Email': lead.email || 'N/A',
+                'CPF': lead.cpf || 'N/A',
+                'Curso de Interesse': lead.cursoInteresse || 'N/A',
+                'Status': lead.status || (lead.converted ? 'Convertido' : 'Pendente'),
+                'Data de Cadastro': formatDate(lead.createdAt),
+                'Promotor': lead.promotorName || 'N/A'
+            }));
+            const worksheet = XLSX.utils.json_to_sheet(dataForSheet);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Leads");
+            XLSX.writeFile(workbook, "leads_exportados.xlsx");
         }
         
         function renderLeadsTable() {
@@ -2072,17 +2148,15 @@
                         <div id="campanha-registration-container" class="bg-white p-6 rounded-xl shadow-lg border"></div>
                     </div>
                     <div class="lg:col-span-2">
-                         <h3 class="text-xl font-bold text-gray-800 mb-2">Filtros e Visualização</h3>
+                         <h3 class="text-xl font-bold text-gray-800 mb-2">Filtros e Histórico</h3>
                         <div id="campanha-filters-container" class="bg-white p-6 rounded-xl shadow-lg border mb-8"></div>
-                        <div id="campanha-blocks-container">
-                            <!-- Campanhas serão renderizadas em blocos aqui -->
-                        </div>
+                        <div id="campanha-table-container" class="bg-white rounded-xl shadow-lg border"></div>
                     </div>
                 </div>
             `;
             renderCampanhasRegistrationForm();
             renderCampanhasFilters();
-            renderCampanhasBlocks(); // Chamada da nova função de renderização em blocos
+            renderCampanhasTable();
         }
 
         function renderCampanhasRegistrationForm() {
@@ -2127,7 +2201,7 @@
 
         function handleCampanhaFilterChange(name, value) {
             campanhaFilterState[name] = value;
-            renderCampanhasBlocks();
+            renderCampanhasTable();
         }
 
         function filterCampanhasData() {
@@ -2158,14 +2232,22 @@
             }).sort((a,b) => new Date(b.dataInicio) - new Date(a.dataInicio));
         }
         
-        function renderCampanhasBlocks() {
-            const container = document.getElementById('campanha-blocks-container');
+        function renderCampanhasTable() {
+            const container = document.getElementById('campanha-table-container');
             const data = filterCampanhasData();
             
-            let blocksHTML = '<div class="grid grid-cols-1 md:grid-cols-2 gap-6">';
+            let tableHTML = `<div class="overflow-x-auto"><table class="w-full text-sm text-left text-gray-500">
+                <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-2">Campanha</th>
+                        <th class="px-4 py-2">Período</th>
+                        <th class="px-4 py-2">Status</th>
+                        <th class="px-4 py-2">Ações</th>
+                    </tr>
+                </thead><tbody>`;
             
             if (data.length === 0) {
-                blocksHTML += `<div class="col-span-full bg-white p-6 rounded-xl shadow-lg border text-center text-gray-500">Nenhuma campanha encontrada com os filtros atuais.</div>`;
+                tableHTML += `<tr><td colspan="4" class="p-4 text-center">Nenhuma campanha encontrada.</td></tr>`;
             } else {
                 const hoje = new Date();
                 hoje.setHours(0,0,0,0);
@@ -2173,47 +2255,33 @@
                 data.forEach(item => {
                     const fim = new Date(item.dataFim + "T00:00:00");
                     const isVigente = hoje <= fim;
-                    
                     let statusHtml = '';
-                    let statusColor = '';
 
                     if(isVigente) {
                         const diasRestantes = calculateWeekdays(hoje, fim);
-                        statusHtml = `Vigente (${diasRestantes} dias)`;
-                        statusColor = 'bg-green-600';
+                        statusHtml = `<span class="px-2 py-1 font-semibold rounded-full bg-green-100 text-green-800">Vigente (${diasRestantes} dias)</span>`;
                     } else {
-                        statusHtml = `Finalizada`;
-                        statusColor = 'bg-red-600';
+                        statusHtml = `<span class="px-2 py-1 font-semibold rounded-full bg-red-100 text-red-800">Finalizada</span>`;
                     }
                     
-                    blocksHTML += `
-                        <div class="bg-white p-6 rounded-xl shadow-2xl border-t-4 border-orange-500 flex flex-col justify-between" data-id="${item.id}">
-                            <div>
-                                <div class="flex justify-between items-start mb-3">
-                                    <h3 class="text-xl font-extrabold text-gray-800">${item.nome}</h3>
-                                    <span class="px-3 py-1 text-xs font-semibold rounded-full text-white ${statusColor}">${statusHtml}</span>
-                                </div>
-                                <p class="text-gray-600 mb-4">${item.descricao}</p>
-                                <div class="text-sm text-gray-500 mb-4">
-                                    <p class="flex items-center space-x-2">${ICONS.CALENDAR.replace('h-5 w-5', 'h-4 w-4')} <span>Início: ${formatDateForInput(item.dataInicio)}</span></p>
-                                    <p class="flex items-center space-x-2">${ICONS.CALENDAR.replace('h-5 w-5', 'h-4 w-4')} <span>Fim: ${formatDateForInput(item.dataFim)}</span></p>
-                                </div>
-                            </div>
-                            <div class="flex justify-end space-x-3 pt-4 border-t border-gray-100">
-                                ${item.link ? `<a href="${item.link}" target="_blank" class="text-blue-600 hover:text-blue-800 flex items-center text-sm">
-                                    ${ICONS.LINK.replace('h-5 w-5', 'h-4 w-4')} Regulamento
-                                </a>` : ''}
-                                <button class="edit-campanha-btn text-blue-600 hover:text-blue-800 text-sm font-semibold" data-id="${item.id}">Editar</button>
-                                <button class="delete-campanha-btn text-red-600 hover:text-red-800 text-sm font-semibold" data-id="${item.id}">Excluir</button>
-                            </div>
-                        </div>
-                    `;
+                    tableHTML += `<tr class="bg-white border-b">
+                        <td class="px-4 py-2"><div class="font-medium">${item.nome}</div><div class="text-xs text-gray-500">${item.descricao}</div></td>
+                        <td class="px-4 py-2">${formatDateForInput(item.dataInicio)} - ${formatDateForInput(item.dataFim)}</td>
+                        <td class="px-4 py-2">${statusHtml}</td>
+                        <td class="px-4 py-2 space-x-2">
+                            ${item.link ? `<a href="${item.link}" target="_blank" class="text-blue-600">Reg.</a>` : ''}
+                            <button class="edit-campanha-btn text-blue-600" data-id="${item.id}">Editar</button>
+                            <button class="delete-campanha-btn text-red-600" data-id="${item.id}">Excluir</button>
+                        </td>
+                    </tr>`;
                 });
             }
-            blocksHTML += '</div>';
-
-            container.innerHTML = blocksHTML;
-            container.addEventListener('click', handleCampanhaTableActions); // Mantendo o mesmo handler para ações
+            tableHTML += '</tbody></table></div>';
+            
+            const newContainer = container.cloneNode(false);
+            container.parentNode.replaceChild(newContainer, container);
+            newContainer.innerHTML = tableHTML;
+            newContainer.addEventListener('click', handleCampanhaTableActions);
         }
         
         async function handleSaveCampanha(e) {
