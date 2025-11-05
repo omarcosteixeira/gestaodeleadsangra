@@ -158,7 +158,8 @@
             writeBatch,
             where,
             deleteDoc,
-            setLogLevel 
+            setLogLevel,
+            orderBy // Adicionando orderBy para consultas mais robustas
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Variáveis de Configuração e Globais ---
@@ -294,7 +295,7 @@
             DATABASE: generateIcon('<ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>'),
             BOOKMARK: generateIcon('<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>'),
             CLOSE: generateIcon('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'),
-            BRIEFCASE: generateIcon('<rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>'),
+            BRIEFCASE: generateIcon('<path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>'),
             LINK: generateIcon('<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>'),
         };
         
@@ -486,6 +487,7 @@
             currentUser = null;
             isAuthReady = false;
             // Limpa dados e listeners
+            isAuthReady = false;
             leadsData = [];
             usersData = [];
             gapData = [];
@@ -630,32 +632,37 @@
             }, (error) => console.error("Erro ao ouvir utilizadores:", error));
 
             // Configuração dos demais listeners (restritos por permissão)
+            
+            // BASES: Adicionando orderBy para robustez
             if (canView('bases')) {
-                const basesQuery = query(collection(db, BASES_COLLECTION_PATH));
+                const basesQuery = query(collection(db, BASES_COLLECTION_PATH), orderBy("createdAt", "desc"));
                 unsubscribeBases = onSnapshot(basesQuery, (snapshot) => {
                     basesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     if (currentView === 'bases') renderView('bases');
                 }, (error) => console.error("Erro ao ouvir bases:", error));
             }
             
+            // CONTROLE BASES: Adicionando orderBy
             if (canView('controle-bases')) {
-                const controleBasesQuery = query(collection(db, CONTROLE_BASES_COLLECTION_PATH));
+                const controleBasesQuery = query(collection(db, CONTROLE_BASES_COLLECTION_PATH), orderBy("dataEntrada", "desc"));
                 unsubscribeControleBases = onSnapshot(controleBasesQuery, (snapshot) => {
                     controleBasesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     if (currentView === 'controle-bases') renderView('controle-bases');
                 }, (error) => console.error("Erro ao ouvir controle de bases:", error));
             }
             
+            // CAMPANHAS: Adicionando orderBy
             if (canView('campanhas')) {
-                const campanhasQuery = query(collection(db, CAMPANHAS_COLLECTION_PATH));
+                const campanhasQuery = query(collection(db, CAMPANHAS_COLLECTION_PATH), orderBy("dataInicio", "desc"));
                 unsubscribeCampanhas = onSnapshot(campanhasQuery, (snapshot) => {
                     campanhasData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     if (currentView === 'campanhas') renderView('campanhas');
                 }, (error) => console.error("Erro ao ouvir campanhas:", error));
             }
 
+            // GAP: Adicionando orderBy
             if (canView('gap')) {
-                const gapQuery = query(collection(db, GAP_COLLECTION_PATH));
+                const gapQuery = query(collection(db, GAP_COLLECTION_PATH), orderBy("createdAt", "desc"));
                 unsubscribeGap = onSnapshot(gapQuery, (snapshot) => {
                     gapData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     if (currentView === 'gap') renderView('gap');
@@ -721,12 +728,13 @@
 
             // Perfis com visualização total ou ampla (Líderes, Sala de Matrícula, QG e FDV)
             if (userRole === ROLES.LIDER_FDV || userRole === ROLES.SALA_MATRICULA || userRole === ROLES.QG || userRole === ROLES.FDV) {
-                // Busca TUDO. A restrição de FDV é feita pelas regras de segurança.
-                leadsQuery = query(collection(db, LEADS_COLLECTION_PATH));
+                // Busca TUDO com ordenação por criação.
+                leadsQuery = query(collection(db, LEADS_COLLECTION_PATH), orderBy("createdAt", "desc"));
                 console.log(`[LEADS QUERY] Buscando todos os leads para o perfil: ${userRole}`);
             } else if (userRole === ROLES.PROMOTOR) {
-                // Promotor vê apenas os seus
-                leadsQuery = query(collection(db, LEADS_COLLECTION_PATH), where("promotorId", "==", currentUser.uid));
+                // Promotor vê apenas os seus, ordenado por criação.
+                // IMPORTANTE: Esta query com where() e orderBy() requer um índice no Firebase.
+                leadsQuery = query(collection(db, LEADS_COLLECTION_PATH), where("promotorId", "==", currentUser.uid), orderBy("createdAt", "desc"));
                 console.log(`[LEADS QUERY] Buscando leads por Promotor ID: ${currentUser.uid}`);
             }
             
@@ -890,6 +898,7 @@
                                 <td class="p-2 text-left font-medium">META DIA</td>
                                 <td>${formatNum(item.metaDia.insc)}</td>
                                 <td>${formatNum(item.metaDia.matFin)}</td>
+                                
                                 <td>${formatNum(item.metaDia.matAcad)}</td>
                             </tr>
                             <tr class="text-gray-500">
@@ -1120,6 +1129,58 @@
             el.classList.add(isError ? 'bg-red-100' : 'bg-green-100', isError ? 'text-red-700' : 'text-green-700');
         }
 
+        // --- UI Helper Function Definitions (Global) ---
+        function renderInputField(label, name, type, required, placeholder, iconHTML = '') {
+            return `
+                <div>
+                    <label for="${name}" class="block text-sm font-medium text-gray-700 flex items-center">
+                        ${iconHTML ? iconHTML.replace('h-5 w-5', 'h-4 w-4').replace('mr-2 inline-block', 'mr-1 text-blue-500') : ''}
+                        ${label}
+                        ${required ? '<span class="ml-1 text-red-500">*</span>' : ''}
+                    </label>
+                    <div class="mt-1">
+                        <input type="${type}" name="${name}" id="${name}" ${required ? 'required' : ''} placeholder="${placeholder}" class="block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                </div>`;
+        }
+
+        function renderFilterInput(label, name, currentValue, iconHTML, placeholder) { 
+            return `<div>
+                        <label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">${iconHTML.replace('h-5 w-5','h-4 w-4').replace('mr-2 inline-block','mr-1 text-blue-500')} ${label}</label>
+                        <input type="text" name="${name}" id="${name}" value="${currentValue}" placeholder="${placeholder}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border"/>
+                    </div>`; 
+        }
+
+        function renderSelectField(label, name, options, required, iconHTML = '') {
+            return `
+                <div>
+                    <label for="${name}" class="block text-sm font-medium text-gray-700 flex items-center">
+                        ${iconHTML ? iconHTML.replace('h-5 w-5', 'h-4 w-4').replace('mr-2 inline-block', 'mr-1 text-blue-500') : ''}
+                        ${label}
+                        ${required ? '<span class="ml-1 text-red-500">*</span>' : ''}
+                    </label>
+                    <div class="mt-1">
+                        <select id="${name}" name="${name}" ${required ? 'required' : ''} class="block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-blue-500 focus:border-blue-500">
+                           <option value="">-- Selecione --</option>
+                           ${options.map(opt => `<option value="${opt}">${opt}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>`;
+        }
+        
+        function renderFilterSelectCustom(label, name, options, currentValue, iconHTML) {
+            const isAll = currentValue === 'all' || currentValue === '';
+             return `<div><label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">${iconHTML.replace('h-5 w-5','h-4 w-4').replace('mr-2 inline-block','mr-1 text-blue-500')} ${label}</label>
+             <select id="${name}" name="${name}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border">
+                <option value="all" ${isAll ? 'selected' : ''}>-- Todos --</option>
+                ${options.map(opt => `<option value="${opt.value}" ${opt.value === currentValue ? 'selected' : ''}>${opt.label}</option>`).join('')}
+             </select></div>`;
+        }
+
+        function renderFilterDate(label, name, currentValue, iconHTML) { 
+            return `<div><label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">${iconHTML.replace('h-5 w-5','h-4 w-4').replace('mr-2 inline-block','mr-1 text-blue-500')} ${label}</label><input type="date" name="${name}" id="${name}" value="${currentValue}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border"/></div>`; 
+        }
+        
         // --- 4. Cadastro de Leads ---
         function renderRegistration() {
             const formContainer = document.getElementById('view-cadastro');
@@ -1161,37 +1222,6 @@
                 </div>`;
             document.getElementById('lead-form').addEventListener('submit', handleSaveLead);
             document.getElementById('btn-import-file').addEventListener('click', handleFileImport);
-        }
-        
-        function renderInputField(label, name, type, required, placeholder, iconHTML = '') {
-            return `
-                <div>
-                    <label for="${name}" class="block text-sm font-medium text-gray-700 flex items-center">
-                        ${iconHTML ? iconHTML.replace('h-5 w-5', 'h-4 w-4').replace('mr-2 inline-block', 'mr-1 text-blue-500') : ''}
-                        ${label}
-                        ${required ? '<span class="ml-1 text-red-500">*</span>' : ''}
-                    </label>
-                    <div class="mt-1">
-                        <input type="${type}" name="${name}" id="${name}" ${required ? 'required' : ''} placeholder="${placeholder}" class="block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-blue-500 focus:border-blue-500">
-                    </div>
-                </div>`;
-        }
-
-        function renderSelectField(label, name, options, required, iconHTML = '') {
-            return `
-                <div>
-                    <label for="${name}" class="block text-sm font-medium text-gray-700 flex items-center">
-                        ${iconHTML ? iconHTML.replace('h-5 w-5', 'h-4 w-4').replace('mr-2 inline-block', 'mr-1 text-blue-500') : ''}
-                        ${label}
-                        ${required ? '<span class="ml-1 text-red-500">*</span>' : ''}
-                    </label>
-                    <div class="mt-1">
-                        <select id="${name}" name="${name}" ${required ? 'required' : ''} class="block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-blue-500 focus:border-blue-500">
-                           <option value="">-- Selecione --</option>
-                           ${options.map(opt => `<option value="${opt}">${opt}</option>`).join('')}
-                        </select>
-                    </div>
-                </div>`;
         }
         
         async function handleSaveLead(e) {
@@ -1384,89 +1414,6 @@
             document.getElementById('btn-clear-lead-filters').addEventListener('click', handleClearLeadFilters);
             document.getElementById('btn-export-excel').addEventListener('click', handleExportToExcel);
             renderLeadsTable();
-        }
-        
-        function renderFilterInput(label, name, currentValue, iconHTML, placeholder) { 
-            return `<div>
-                        <label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">${iconHTML.replace('h-5 w-5','h-4 w-4').replace('mr-2 inline-block','mr-1 text-blue-500')} ${label}</label>
-                        <input type="text" name="${name}" id="${name}" value="${currentValue}" placeholder="${placeholder}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border"/>
-                    </div>`; 
-        }
-
-        function renderFilterSelect(label, name, options, currentValue, iconHTML) { 
-            const isAll = currentValue === 'all' || currentValue === '';
-            return `<div><label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">${iconHTML.replace('h-5 w-5','h-4 w-4').replace('mr-2 inline-block','mr-1 text-blue-500')} ${label}</label><select id="${name}" name="${name}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border"><option value="all" ${isAll ? 'selected' : ''}>-- Todos --</option>${options.map(opt => `<option value="${opt}" ${opt === currentValue ? 'selected' : ''}>${opt}</option>`).join('')}</select></div>`; 
-        }
-        
-        // NOVO: Helper para filtros com valor e texto diferentes (ex: Sim/Não)
-        function renderFilterSelectCustom(label, name, options, currentValue, iconHTML) {
-            const isAll = currentValue === 'all' || currentValue === '';
-             return `<div><label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">${iconHTML.replace('h-5 w-5','h-4 w-4').replace('mr-2 inline-block','mr-1 text-blue-500')} ${label}</label>
-             <select id="${name}" name="${name}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border">
-                <option value="all" ${isAll ? 'selected' : ''}>-- Todos --</option>
-                ${options.map(opt => `<option value="${opt.value}" ${opt.value === currentValue ? 'selected' : ''}>${opt.label}</option>`).join('')}
-             </select></div>`;
-        }
-
-        function renderFilterDate(label, name, currentValue, iconHTML) { 
-            return `<div><label for="${name}" class="block text-sm font-medium text-gray-700 mb-1 flex items-center">${iconHTML.replace('h-5 w-5','h-4 w-4').replace('mr-2 inline-block','mr-1 text-blue-500')} ${label}</label><input type="date" name="${name}" id="${name}" value="${currentValue}" class="block w-full rounded-lg border-gray-300 shadow-sm p-2 border"/></div>`; 
-        }
-
-        function handleLeadFilterChange(name, value) {
-            leadFilterState[name] = value;
-            renderLeadsTable();
-        }
-
-        function handleClearLeadFilters() {
-            leadFilterState = { acao: '', dia: '', promotorId: '', status: 'all', telefone: '', curso: '' };
-            renderHistory();
-        }
-
-        function filterLeads() {
-            return leadsData.filter(lead => {
-                if (leadFilterState.acao && lead.acao !== leadFilterState.acao) return false;
-                if (leadFilterState.dia) {
-                    if (!lead.createdAt) return false;
-                    
-                    const [year, month, day] = leadFilterState.dia.split('-').map(Number);
-                    const leadDate = lead.createdAt.toDate();
-                    
-                    // Compara ano, mês e dia da data do lead com a data do filtro
-                    if (leadDate.getFullYear() !== year || (leadDate.getMonth() + 1) !== month || leadDate.getDate() !== day) return false;
-                }
-                
-                if (leadFilterState.promotorId && lead.promotorName !== leadFilterState.promotorId) return false;
-                if (leadFilterState.telefone && (!lead.telefone || !lead.telefone.includes(leadFilterState.telefone))) return false;
-                if (leadFilterState.curso && lead.cursoInteresse !== leadFilterState.curso) return false;
-                
-                const currentStatus = lead.status || (lead.converted ? 'Convertido' : 'Pendente');
-                if (leadFilterState.status !== 'all' && currentStatus !== leadFilterState.status) return false;
-                
-                return true;
-            }).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-        }
-
-        function handleExportToExcel() {
-            const leadsToExport = filterLeads();
-            if (leadsToExport.length === 0) {
-                showToast("Nenhum lead para exportar.", true);
-                return;
-            }
-            const dataForSheet = leadsToExport.map(lead => ({
-                'Ação': lead.acao,
-                'Nome Completo': lead.nome,
-                'Telefone': lead.telefone,
-                'Email': lead.email || 'N/A',
-                'CPF': lead.cpf || 'N/A',
-                'Curso de Interesse': lead.cursoInteresse || 'N/A',
-                'Status': lead.status || (lead.converted ? 'Convertido' : 'Pendente'),
-                'Data de Cadastro': formatDate(lead.createdAt),
-                'Promotor': lead.promotorName || 'N/A'
-            }));
-            const worksheet = XLSX.utils.json_to_sheet(dataForSheet);
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, "Leads");
-            XLSX.writeFile(workbook, "leads_exportados.xlsx");
         }
         
         function renderLeadsTable() {
@@ -2148,15 +2095,15 @@
                         <div id="campanha-registration-container" class="bg-white p-6 rounded-xl shadow-lg border"></div>
                     </div>
                     <div class="lg:col-span-2">
-                         <h3 class="text-xl font-bold text-gray-800 mb-2">Filtros e Histórico</h3>
+                         <h3 class="text-xl font-bold text-gray-800 mb-2">Filtros e Visualização</h3>
                         <div id="campanha-filters-container" class="bg-white p-6 rounded-xl shadow-lg border mb-8"></div>
-                        <div id="campanha-table-container" class="bg-white rounded-xl shadow-lg border"></div>
+                        <div id="campanha-blocks-container"></div>
                     </div>
                 </div>
             `;
             renderCampanhasRegistrationForm();
             renderCampanhasFilters();
-            renderCampanhasTable();
+            renderCampanhasBlocks(); // Chamando a nova função de renderização em blocos
         }
 
         function renderCampanhasRegistrationForm() {
@@ -2201,7 +2148,7 @@
 
         function handleCampanhaFilterChange(name, value) {
             campanhaFilterState[name] = value;
-            renderCampanhasTable();
+            renderCampanhasBlocks();
         }
 
         function filterCampanhasData() {
@@ -2232,22 +2179,15 @@
             }).sort((a,b) => new Date(b.dataInicio) - new Date(a.dataInicio));
         }
         
-        function renderCampanhasTable() {
-            const container = document.getElementById('campanha-table-container');
+        // NOVO: Função para renderizar as campanhas em blocos/cards
+        function renderCampanhasBlocks() {
+            const container = document.getElementById('campanha-blocks-container');
             const data = filterCampanhasData();
             
-            let tableHTML = `<div class="overflow-x-auto"><table class="w-full text-sm text-left text-gray-500">
-                <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                    <tr>
-                        <th class="px-4 py-2">Campanha</th>
-                        <th class="px-4 py-2">Período</th>
-                        <th class="px-4 py-2">Status</th>
-                        <th class="px-4 py-2">Ações</th>
-                    </tr>
-                </thead><tbody>`;
+            let blocksHTML = '<div class="grid grid-cols-1 md:grid-cols-2 gap-6">';
             
             if (data.length === 0) {
-                tableHTML += `<tr><td colspan="4" class="p-4 text-center">Nenhuma campanha encontrada.</td></tr>`;
+                blocksHTML = `<div class="bg-white p-6 rounded-xl shadow-lg border text-center text-gray-500">Nenhuma campanha encontrada com os filtros atuais.</div>`;
             } else {
                 const hoje = new Date();
                 hoje.setHours(0,0,0,0);
@@ -2255,33 +2195,49 @@
                 data.forEach(item => {
                     const fim = new Date(item.dataFim + "T00:00:00");
                     const isVigente = hoje <= fim;
+                    
                     let statusHtml = '';
+                    let borderColor = 'border-orange-500';
 
                     if(isVigente) {
                         const diasRestantes = calculateWeekdays(hoje, fim);
-                        statusHtml = `<span class="px-2 py-1 font-semibold rounded-full bg-green-100 text-green-800">Vigente (${diasRestantes} dias)</span>`;
+                        statusHtml = `<span class="px-3 py-1 font-semibold rounded-full text-xs bg-green-100 text-green-800">Vigente (${diasRestantes} dias)</span>`;
+                        borderColor = 'border-green-500';
                     } else {
-                        statusHtml = `<span class="px-2 py-1 font-semibold rounded-full bg-red-100 text-red-800">Finalizada</span>`;
+                        statusHtml = `<span class="px-3 py-1 font-semibold rounded-full text-xs bg-red-100 text-red-800">Finalizada</span>`;
+                        borderColor = 'border-gray-400';
                     }
                     
-                    tableHTML += `<tr class="bg-white border-b">
-                        <td class="px-4 py-2"><div class="font-medium">${item.nome}</div><div class="text-xs text-gray-500">${item.descricao}</div></td>
-                        <td class="px-4 py-2">${formatDateForInput(item.dataInicio)} - ${formatDateForInput(item.dataFim)}</td>
-                        <td class="px-4 py-2">${statusHtml}</td>
-                        <td class="px-4 py-2 space-x-2">
-                            ${item.link ? `<a href="${item.link}" target="_blank" class="text-blue-600">Reg.</a>` : ''}
-                            <button class="edit-campanha-btn text-blue-600" data-id="${item.id}">Editar</button>
-                            <button class="delete-campanha-btn text-red-600" data-id="${item.id}">Excluir</button>
-                        </td>
-                    </tr>`;
+                    blocksHTML += `
+                        <div class="bg-white p-6 rounded-xl shadow-lg border-t-4 ${borderColor}" data-id="${item.id}">
+                            <div class="flex justify-between items-start mb-3">
+                                <h3 class="font-extrabold text-lg text-gray-800">${item.nome}</h3>
+                                ${statusHtml}
+                            </div>
+                            <p class="text-sm text-gray-600 mb-4">${item.descricao}</p>
+                            
+                            <div class="text-xs text-gray-500 mb-4">
+                                <p class="flex items-center space-x-1">${ICONS.CALENDAR.replace('h-5 w-5', 'h-4 w-4').replace('mr-2 inline-block', 'mr-1')}<span>Período: ${formatDateForInput(item.dataInicio)} - ${formatDateForInput(item.dataFim)}</span></p>
+                                ${item.link ? `<p class="flex items-center space-x-1 mt-1 text-blue-600">${ICONS.LINK.replace('h-5 w-5', 'h-4 w-4').replace('mr-2 inline-block', 'mr-1')} <a href="${item.link}" target="_blank" class="hover:underline">Regulamento</a></p>` : ''}
+                            </div>
+
+                            <div class="flex justify-end space-x-2 border-t pt-3 mt-3">
+                                <button class="edit-campanha-btn text-blue-600 hover:text-blue-800 font-semibold text-sm" data-id="${item.id}">Editar</button>
+                                <button class="delete-campanha-btn text-red-600 hover:text-red-800 font-semibold text-sm" data-id="${item.id}">Excluir</button>
+                            </div>
+                        </div>
+                    `;
                 });
+                blocksHTML += '</div>';
             }
-            tableHTML += '</tbody></table></div>';
             
-            const newContainer = container.cloneNode(false);
-            container.parentNode.replaceChild(newContainer, container);
-            newContainer.innerHTML = tableHTML;
-            newContainer.addEventListener('click', handleCampanhaTableActions);
+            container.innerHTML = blocksHTML;
+            container.addEventListener('click', handleCampanhaTableActions); // O nome da função de handler permanece o mesmo
+        }
+
+        // Renomeada a função de tabela para Blocks para refletir a mudança
+        function renderCampanhasTable() {
+             renderCampanhasBlocks();
         }
         
         async function handleSaveCampanha(e) {
