@@ -162,7 +162,9 @@
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Variáveis de Configuração e Globais ---
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'gestaodeleadsangra-2cc1d';
+        // Acessamos o __app_id fornecido pelo Canvas (garantindo que seja uma string)
+        const appId = typeof __app_id === 'string' && __app_id.length > 0 ? __app_id : 'gestaodeleadsangra-2cc1d';
+        console.log(`[INIT] Usando appId: ${appId}`);
         
         const firebaseConfig = typeof __firebase_config !== 'undefined' && __firebase_config !== "{}"
             ? JSON.parse(__firebase_config) 
@@ -175,6 +177,7 @@
                 appId: "1:914587846773:web:fdd7dc3cc4fcf93529903c"
             };
         
+        // CORREÇÃO: Usamos o appId validado para construir os caminhos
         const LEADS_COLLECTION_PATH = `artifacts/${appId}/public/data/leads`;
         const USERS_COLLECTION_PATH = `artifacts/${appId}/public/data/users`;
         const GAP_COLLECTION_PATH = `artifacts/${appId}/public/data/gap_academico`;
@@ -205,6 +208,7 @@
         let linksUteisData = [];
         let currentView = 'cadastro';
         let isAuthReady = false;
+        // ... (unsubscribes functions remain the same) ...
         let unsubscribeLeads = () => {};
         let unsubscribeUsers = () => {};
         let unsubscribeGap = () => {};
@@ -240,7 +244,7 @@
             'controle-bases': [ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV],
             'campanhas': [ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV],
             'gap':       [ROLES.SALA_MATRICULA, ROLES.LIDER_FDV],
-            'admin':     [ROLES.LIDER_FDV, ROLES.SALA_MATRICULA] // Adicionado SALA_MATRICULA
+            'admin':     [ROLES.LIDER_FDV, ROLES.SALA_MATRICULA] 
         };
 
         // --- Helpers de UI e Formatação ---
@@ -453,6 +457,7 @@
             const userProfile = await fetchUserProfile(user.uid, user.email);
             currentUser = { uid: user.uid, email: user.email, ...userProfile };
             isAuthReady = true;
+            console.log(`[USER] Usuário logado: ${currentUser.name}, Perfil: ${currentUser.role}`);
             
             document.getElementById('loading-screen').classList.add('hidden');
             document.getElementById('auth-screen').classList.add('hidden');
@@ -600,17 +605,15 @@
                 return;
             }
             
-            // 1. USERS Listener: Necessário para obter perfis atualizados (especialmente para FDV e Admin)
+            // 1. USERS Listener: Necessário para obter perfis atualizados 
             const usersQuery = query(collection(db, USERS_COLLECTION_PATH));
             unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
                 usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 
-                // Verifica se o perfil do usuário logado mudou (se o Líder o atualizou)
                 const myProfile = usersData.find(u => u.id === currentUser.uid);
                 if (myProfile && (myProfile.role !== currentUser.role || myProfile.name !== currentUser.name)) {
                     currentUser = { ...currentUser, ...myProfile };
-                    renderNav(); // Re-renderiza navegação para atualizar permissões
-                    // Atualiza display de usuário
+                    renderNav();
                     document.getElementById('user-info-display').innerHTML = `
                         <div class="flex items-center space-x-2">
                             <i class="gg-user"></i>
@@ -619,16 +622,12 @@
                         </div>`;
                 }
                 
-                // O listener de Leads precisa ser reconfigurado se o perfil FDV estiver ativo, 
-                // pois ele pode depender da lista de promotores que acabamos de receber.
+                // CRUCIAL: Chama o listener de Leads para garantir que a query correta seja usada
+                // com base no `currentUser.role` e no `usersData` atualizados.
                 setupLeadsListener(); 
-                
+
                 if (['admin', 'historico', 'cadastro', 'controle-bases'].includes(currentView)) renderView(currentView);
             }, (error) => console.error("Erro ao ouvir utilizadores:", error));
-
-            // Configura o listener de Leads imediatamente após o login, ou após a primeira atualização de USERS (para FDV).
-            // A chamada acima no callback do onSnapshot garante que ele rode novamente se o usersData mudar.
-            // setupLeadsListener(); // Removida daqui para evitar chamada dupla e garantir que rode após receber usersData
 
             // Configuração dos demais listeners (restritos por permissão)
             if (canView('bases')) {
@@ -720,20 +719,22 @@
             let leadsQuery;
             const userRole = currentUser.role;
 
-            // Perfis com visualização total (Líderes, Sala de Matrícula, QG e FDV)
+            // Perfis com visualização total ou ampla (Líderes, Sala de Matrícula, QG e FDV)
             if (userRole === ROLES.LIDER_FDV || userRole === ROLES.SALA_MATRICULA || userRole === ROLES.QG || userRole === ROLES.FDV) {
-                // Query para buscar TUDO, confiando nas Regras de Segurança para aplicar as restrições corretas
-                // (por exemplo, o FDV terá a leitura limitada pelas Rules a leads de promotores/ele mesmo)
+                // Busca TUDO. A restrição de FDV é feita pelas regras de segurança.
                 leadsQuery = query(collection(db, LEADS_COLLECTION_PATH));
+                console.log(`[LEADS QUERY] Buscando todos os leads para o perfil: ${userRole}`);
             } else if (userRole === ROLES.PROMOTOR) {
                 // Promotor vê apenas os seus
                 leadsQuery = query(collection(db, LEADS_COLLECTION_PATH), where("promotorId", "==", currentUser.uid));
+                console.log(`[LEADS QUERY] Buscando leads por Promotor ID: ${currentUser.uid}`);
             }
             
             // SOMENTE anexa o listener se leadsQuery foi definido.
             if(leadsQuery) {
                 unsubscribeLeads = onSnapshot(leadsQuery, (snapshot) => {
                     leadsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    console.log(`[LEADS DATA] Recebidos ${leadsData.length} leads.`);
                     if (['dashboard', 'historico', 'cadastro'].includes(currentView)) {
                         renderView(currentView);
                     }
