@@ -228,18 +228,20 @@
         let campanhaFilterState = { nome: '', data: '', status: 'all' };
 
         // --- Configuração de Perfis e Permissões ---
+        // 1. REMOÇÃO DO PERFIL FDV
         const ROLES = { 
             PROMOTOR: 'Promotor', 
-            FDV: 'FDV',
+            // FDV: 'FDV', <-- Removido
             SALA_MATRICULA: 'Sala de Matrícula',
             QG: 'QG', 
             LIDER_FDV: 'Líder/FDV' 
         };
 
         const VIEW_PERMISSIONS = { 
-            'dashboard': [ROLES.PROMOTOR, ROLES.FDV, ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV],
-            'cadastro':  [ROLES.PROMOTOR, ROLES.FDV, ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV], 
-            'historico': [ROLES.FDV, ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV], 
+            // FDV Removido. PROMOTOR agora tem acesso ao 'historico' (Leads)
+            'dashboard': [ROLES.PROMOTOR, ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV],
+            'cadastro':  [ROLES.PROMOTOR, ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV], 
+            'historico': [ROLES.PROMOTOR, ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV], // Permissão ajustada
             'bases':     [ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV],
             'controle-bases': [ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV],
             'campanhas': [ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV],
@@ -719,9 +721,9 @@
             let leadsQuery;
             const userRole = currentUser.role;
 
-            // Perfis com visualização total ou ampla (Líderes, Sala de Matrícula, QG e FDV)
-            if (userRole === ROLES.LIDER_FDV || userRole === ROLES.SALA_MATRICULA || userRole === ROLES.QG || userRole === ROLES.FDV) {
-                // Busca TUDO. A restrição de FDV é feita pelas regras de segurança.
+            // 1. REMOÇÃO DO PERFIL FDV: Perfis com visualização total ou ampla (Líderes, Sala de Matrícula e QG)
+            if (userRole === ROLES.LIDER_FDV || userRole === ROLES.SALA_MATRICULA || userRole === ROLES.QG) {
+                // Busca TUDO. 
                 leadsQuery = query(collection(db, LEADS_COLLECTION_PATH));
                 console.log(`[LEADS QUERY] Buscando todos os leads para o perfil: ${userRole}`);
             } else if (userRole === ROLES.PROMOTOR) {
@@ -1337,15 +1339,11 @@
             const stats = calculateStats();
             const uniqueActions = [...new Set(leadsData.map(lead => lead.acao).filter(Boolean))].sort();
             
-            let promotors = [];
-            if (currentUser.role === ROLES.FDV) {
-                // Para FDV, mostramos todos os promotores (incluindo ele mesmo se tiver leads)
-                const allUserNames = [...new Map(usersData.map(user => [user.id, user.name])).values()].filter(Boolean).sort();
-                promotors = allUserNames;
-            } else {
-                // Para Líderes, mostramos todos os nomes
-                promotors = [...new Map(usersData.map(user => [user.id, user.name])).values()].filter(Boolean).sort();
-            }
+            // 1. REMOÇÃO DO PERFIL FDV: Lógica de exibição de promotores no filtro
+            // A lista de promotores no filtro só é útil para perfis de gestão (Líder/Sala/QG)
+            const promotors = (currentUser.role === ROLES.LIDER_FDV || currentUser.role === ROLES.SALA_MATRICULA || currentUser.role === ROLES.QG)
+                ? [...new Map(usersData.map(user => [user.id, user.name])).values()].filter(Boolean).sort()
+                : []; // Promotor não precisa filtrar por outros promotores
 
             const uniqueCourses = [...new Set(leadsData.map(lead => lead.cursoInteresse).filter(Boolean))].sort();
 
@@ -1366,7 +1364,7 @@
                 <div class="bg-white p-6 rounded-xl shadow-lg grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 border" id="filter-container">
                     ${renderFilterSelect("Ação", "acao", uniqueActions, leadFilterState.acao, ICONS.TAG)}
                     ${renderFilterDate("Dia", "dia", leadFilterState.dia, ICONS.CALENDAR)}
-                    ${renderFilterSelect("Promotor", "promotorId", promotors, leadFilterState.promotorId, ICONS.USER)}
+                    ${(promotors.length > 0) ? renderFilterSelect("Promotor", "promotorId", promotors, leadFilterState.promotorId, ICONS.USER) : ''}
                     ${renderFilterInput("Telefone", "telefone", leadFilterState.telefone, ICONS.PHONE, "Buscar...")}
                     ${renderFilterSelect("Curso", "curso", uniqueCourses, leadFilterState.curso, ICONS.LIST)}
                     ${renderFilterSelect("Status", "status", ["Pendente", "Sem Retorno", "Interessado", "Não Interessado", "Convertido"], leadFilterState.status, ICONS.CHECK)}
@@ -1435,7 +1433,13 @@
                     if (leadDate.getFullYear() !== year || (leadDate.getMonth() + 1) !== month || leadDate.getDate() !== day) return false;
                 }
                 
-                if (leadFilterState.promotorId && lead.promotorName !== leadFilterState.promotorId) return false;
+                // CRITICAL FIX: O filtro de Promotor só deve ser aplicado se o promotorId for selecionado
+                // E só é relevante para perfis que podem ver leads de todos.
+                if (leadFilterState.promotorId && leadFilterState.promotorId !== 'all') {
+                    // O valor do filtro é o 'name', não o 'id'
+                    if (lead.promotorName !== leadFilterState.promotorId) return false;
+                }
+
                 if (leadFilterState.telefone && (!lead.telefone || !lead.telefone.includes(leadFilterState.telefone))) return false;
                 if (leadFilterState.curso && lead.cursoInteresse !== leadFilterState.curso) return false;
                 
@@ -1855,6 +1859,7 @@
                 });
             }
             tableHTML += '</tbody></table></div>';
+            
             container.innerHTML = tableHTML;
             
             container.addEventListener('change', (e) => {
@@ -2150,13 +2155,13 @@
                     <div class="lg:col-span-2">
                          <h3 class="text-xl font-bold text-gray-800 mb-2">Filtros e Histórico</h3>
                         <div id="campanha-filters-container" class="bg-white p-6 rounded-xl shadow-lg border mb-8"></div>
-                        <div id="campanha-table-container" class="bg-white rounded-xl shadow-lg border"></div>
+                        <div id="campanha-cards-container"></div> <!-- 2. AJUSTE: Container de Cards -->
                     </div>
                 </div>
             `;
             renderCampanhasRegistrationForm();
             renderCampanhasFilters();
-            renderCampanhasTable();
+            renderCampanhasCards(); // 2. AJUSTE: Chamando a função de cards
         }
 
         function renderCampanhasRegistrationForm() {
@@ -2201,7 +2206,7 @@
 
         function handleCampanhaFilterChange(name, value) {
             campanhaFilterState[name] = value;
-            renderCampanhasTable();
+            renderCampanhasCards(); // 2. AJUSTE: Renderizar cards
         }
 
         function filterCampanhasData() {
@@ -2232,56 +2237,68 @@
             }).sort((a,b) => new Date(b.dataInicio) - new Date(a.dataInicio));
         }
         
-        function renderCampanhasTable() {
-            const container = document.getElementById('campanha-table-container');
+        // 2. AJUSTE: Função para renderizar Campanhas em Cards (substitui renderCampanhasTable)
+        function renderCampanhasCards() {
+            const container = document.getElementById('campanha-cards-container');
             const data = filterCampanhasData();
+            const hoje = new Date();
+            hoje.setHours(0,0,0,0);
             
-            let tableHTML = `<div class="overflow-x-auto"><table class="w-full text-sm text-left text-gray-500">
-                <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                    <tr>
-                        <th class="px-4 py-2">Campanha</th>
-                        <th class="px-4 py-2">Período</th>
-                        <th class="px-4 py-2">Status</th>
-                        <th class="px-4 py-2">Ações</th>
-                    </tr>
-                </thead><tbody>`;
-            
+            let cardsHTML = '';
+
             if (data.length === 0) {
-                tableHTML += `<tr><td colspan="4" class="p-4 text-center">Nenhuma campanha encontrada.</td></tr>`;
+                cardsHTML = `<div class="p-6 text-center text-gray-500 bg-white rounded-xl shadow-lg border">Nenhuma campanha encontrada com os filtros atuais.</div>`;
             } else {
-                const hoje = new Date();
-                hoje.setHours(0,0,0,0);
+                cardsHTML = `<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">`;
                 
                 data.forEach(item => {
                     const fim = new Date(item.dataFim + "T00:00:00");
                     const isVigente = hoje <= fim;
                     let statusHtml = '';
+                    let borderColor = '';
 
                     if(isVigente) {
                         const diasRestantes = calculateWeekdays(hoje, fim);
-                        statusHtml = `<span class="px-2 py-1 font-semibold rounded-full bg-green-100 text-green-800">Vigente (${diasRestantes} dias)</span>`;
+                        statusHtml = `<span class="px-3 py-1 font-semibold rounded-full text-sm bg-green-100 text-green-800">Vigente (${diasRestantes} dias)</span>`;
+                        borderColor = 'border-green-500';
                     } else {
-                        statusHtml = `<span class="px-2 py-1 font-semibold rounded-full bg-red-100 text-red-800">Finalizada</span>`;
+                        statusHtml = `<span class="px-3 py-1 font-semibold rounded-full text-sm bg-red-100 text-red-800">Finalizada</span>`;
+                        borderColor = 'border-red-500';
                     }
                     
-                    tableHTML += `<tr class="bg-white border-b">
-                        <td class="px-4 py-2"><div class="font-medium">${item.nome}</div><div class="text-xs text-gray-500">${item.descricao}</div></td>
-                        <td class="px-4 py-2">${formatDateForInput(item.dataInicio)} - ${formatDateForInput(item.dataFim)}</td>
-                        <td class="px-4 py-2">${statusHtml}</td>
-                        <td class="px-4 py-2 space-x-2">
-                            ${item.link ? `<a href="${item.link}" target="_blank" class="text-blue-600">Reg.</a>` : ''}
-                            <button class="edit-campanha-btn text-blue-600" data-id="${item.id}">Editar</button>
-                            <button class="delete-campanha-btn text-red-600" data-id="${item.id}">Excluir</button>
-                        </td>
-                    </tr>`;
+                    cardsHTML += `
+                    <div class="bg-white p-6 rounded-xl shadow-2xl border-t-4 ${borderColor} flex flex-col justify-between" data-item-id="${item.id}">
+                        <div>
+                            <h3 class="text-xl font-bold text-gray-900 mb-2">${item.nome}</h3>
+                            <p class="text-gray-600 mb-4">${item.descricao}</p>
+                            <div class="space-y-2 text-sm">
+                                <p class="flex justify-between items-center text-gray-700">
+                                    <span class="font-semibold">Início:</span> 
+                                    <span>${formatDateForInput(item.dataInicio)}</span>
+                                </p>
+                                <p class="flex justify-between items-center text-gray-700">
+                                    <span class="font-semibold">Fim:</span> 
+                                    <span>${formatDateForInput(item.dataFim)}</span>
+                                </p>
+                            </div>
+                        </div>
+                        <div class="mt-4 pt-4 border-t border-gray-100">
+                            <div class="mb-3">${statusHtml}</div>
+                            <div class="flex space-x-2">
+                                ${item.link ? `<a href="${item.link}" target="_blank" class="flex-1 text-center bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg text-sm">Regulamento</a>` : ''}
+                                <button class="edit-campanha-btn flex-1 bg-yellow-500 hover:bg-yellow-600 text-white font-medium py-2 px-4 rounded-lg text-sm" data-id="${item.id}">Editar</button>
+                                <button class="delete-campanha-btn flex-1 bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg text-sm" data-id="${item.id}">Excluir</button>
+                            </div>
+                        </div>
+                    </div>`;
                 });
+                
+                cardsHTML += `</div>`;
             }
-            tableHTML += '</tbody></table></div>';
             
-            const newContainer = container.cloneNode(false);
-            container.parentNode.replaceChild(newContainer, container);
-            newContainer.innerHTML = tableHTML;
-            newContainer.addEventListener('click', handleCampanhaTableActions);
+            // Re-anexa o conteúdo e o listener de delegação (que está em handleCampanhaTableActions)
+            container.innerHTML = cardsHTML;
+            container.addEventListener('click', handleCampanhaTableActions);
         }
         
         async function handleSaveCampanha(e) {
@@ -2321,10 +2338,14 @@
         }
         
         function handleCampanhaTableActions(e) {
-            const id = e.target.dataset.id;
+            // Esta função lida com os cliques nos botões dos CARDS (anteriormente tabela)
+            const btn = e.target.closest('button');
+            if (!btn) return;
+            
+            const id = btn.dataset.id;
             if(!id) return;
             
-            if(e.target.classList.contains('edit-campanha-btn')) {
+            if(btn.classList.contains('edit-campanha-btn')) {
                 const item = campanhasData.find(d => d.id === id);
                 if (item) {
                     const form = document.getElementById('campanha-form');
@@ -2335,7 +2356,7 @@
                     form['campanha-dataInicio'].value = item.dataInicio;
                     form['campanha-dataFim'].value = item.dataFim;
                 }
-            } else if (e.target.classList.contains('delete-campanha-btn')) {
+            } else if (btn.classList.contains('delete-campanha-btn')) {
                  showConfirm('Tem certeza que deseja excluir esta campanha?', () => {
                     handleDeleteCampanha(id);
                 });
@@ -2377,7 +2398,46 @@
             renderGapImportForm();
             renderGapFilters();
             renderGapTable();
+
+            // 3. CORREÇÃO DE BINDING: Adicionar listeners de delegação de eventos UMA VEZ ao container da tabela
+            const gapTableContainer = document.getElementById('gap-table-container');
+            if (gapTableContainer) {
+                // Listener para toggles e botões
+                gapTableContainer.removeEventListener('click', handleGapTableClicks);
+                gapTableContainer.addEventListener('click', handleGapTableClicks);
+                
+                // Listener para textarea (Observações)
+                gapTableContainer.removeEventListener('change', handleGapTableChanges);
+                gapTableContainer.addEventListener('change', handleGapTableChanges);
+            }
         }
+
+        // Funções separadas para manusear os eventos da tabela GAP
+        function handleGapTableClicks(e) {
+            const target = e.target.closest('.doc-toggle');
+            if (target) {
+                const { id, doc, action } = target.dataset;
+                const entry = gapData.find(g => g.id === id);
+                if (!entry) return;
+
+                if (action === 'toggleMatAcad') {
+                    const currentStatus = entry.matAcad || false;
+                    handleGapUpdate(id, { matAcad: !currentStatus });
+                } else if (doc) {
+                    // Update the specific nested field using dot notation (Firestore requirement)
+                    const currentDocStatus = (entry.documentos && entry.documentos[doc]) || false;
+                    // Note: Firestore requires dot notation for nested fields, which is handled correctly by JS object spread:
+                    handleGapUpdate(id, { [`documentos.${doc}`]: !currentDocStatus }); 
+                }
+            }
+        }
+
+        function handleGapTableChanges(e) {
+            if (e.target.matches('.obs-input')) {
+                handleGapUpdate(e.target.dataset.id, { observacao: e.target.value });
+            }
+        }
+
 
         function renderGapDashboard() {
             const container = document.getElementById('gap-dashboard-container');
@@ -2544,32 +2604,9 @@
             }
             tableHTML += '</tbody></table></div>';
             
-            // CORREÇÃO: Substituir o container para garantir que os event listeners funcionem após re-renderizar
-            const newContainer = container.cloneNode(true);
-            container.parentNode.replaceChild(newContainer, container);
-            
-            newContainer.addEventListener('click', (e) => {
-                const target = e.target.closest('.doc-toggle');
-                if (target) {
-                    const { id, doc, action } = target.dataset;
-                    const entry = gapData.find(g => g.id === id);
-                    if (!entry) return;
-
-                    if (action === 'toggleMatAcad') {
-                        const currentStatus = entry.matAcad || false;
-                        handleGapUpdate(id, { matAcad: !currentStatus });
-                    } else if (doc) {
-                        // Assegura que 'documentos' existe antes de tentar aceder a uma propriedade
-                        const currentDocStatus = (entry.documentos && entry.documentos[doc]) || false;
-                        handleGapUpdate(id, { [`documentos.${doc}`]: !currentDocStatus });
-                    }
-                }
-            });
-            newContainer.addEventListener('change', (e) => {
-                if (e.target.matches('.obs-input')) {
-                    handleGapUpdate(e.target.dataset.id, { observacao: e.target.value });
-                }
-            });
+            // 3. CORREÇÃO DE BINDING: Apenas atualiza o innerHTML. Os listeners de delegação
+            // de eventos (click e change) são anexados no renderGapView apenas uma vez.
+            container.innerHTML = tableHTML;
         }
 
         async function handleGapUpdate(id, dataToUpdate) {
@@ -2820,6 +2857,7 @@
         }
 
         function renderUserRow(user) {
+            // 1. REMOÇÃO DO PERFIL FDV: Regra de edição.
             const isEditable = (currentUser.role === ROLES.LIDER_FDV || currentUser.role === ROLES.SALA_MATRICULA) && user.id !== currentUser.uid;
             return `
                 <tr class="hover:bg-blue-50">
