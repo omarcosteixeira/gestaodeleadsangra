@@ -228,20 +228,19 @@
         let campanhaFilterState = { nome: '', data: '', status: 'all' };
 
         // --- Configuração de Perfis e Permissões ---
-        // 1. REMOÇÃO DO PERFIL FDV
+        // 1. REMOÇÃO DO PERFIL FDV: Perfil FDV removido
         const ROLES = { 
             PROMOTOR: 'Promotor', 
-            // FDV: 'FDV', <-- Removido
             SALA_MATRICULA: 'Sala de Matrícula',
             QG: 'QG', 
             LIDER_FDV: 'Líder/FDV' 
         };
 
         const VIEW_PERMISSIONS = { 
-            // FDV Removido. PROMOTOR agora tem acesso ao 'historico' (Leads)
+            // Permissões ajustadas após remoção do FDV
             'dashboard': [ROLES.PROMOTOR, ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV],
             'cadastro':  [ROLES.PROMOTOR, ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV], 
-            'historico': [ROLES.PROMOTOR, ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV], // Permissão ajustada
+            'historico': [ROLES.PROMOTOR, ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV], 
             'bases':     [ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV],
             'controle-bases': [ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV],
             'campanhas': [ROLES.SALA_MATRICULA, ROLES.QG, ROLES.LIDER_FDV],
@@ -721,7 +720,7 @@
             let leadsQuery;
             const userRole = currentUser.role;
 
-            // 1. REMOÇÃO DO PERFIL FDV: Perfis com visualização total ou ampla (Líderes, Sala de Matrícula e QG)
+            // Perfis com visualização total ou ampla (Líderes, Sala de Matrícula e QG)
             if (userRole === ROLES.LIDER_FDV || userRole === ROLES.SALA_MATRICULA || userRole === ROLES.QG) {
                 // Busca TUDO. 
                 leadsQuery = query(collection(db, LEADS_COLLECTION_PATH));
@@ -808,31 +807,38 @@
             `;
         }
 
-        // NOVO: Função para renderizar o card do período
+        // 1. AJUSTE: Função para renderizar o card do período com nomenclatura
         function renderPeriodoCaptacaoCard() {
             let dataInicioStr = "N/D";
             let dataFimStr = "N/D";
             let diasRestantesDisplay = "N/A";
+            let nomenclatura = "Período de Captação Atual";
 
-            if (captacaoConfigData && captacaoConfigData.dataInicio && captacaoConfigData.dataFim) {
-                const inicio = new Date(captacaoConfigData.dataInicio + "T00:00:00");
-                const fim = new Date(captacaoConfigData.dataFim + "T00:00:00");
-                const hoje = new Date();
-                hoje.setHours(0, 0, 0, 0);
+            if (captacaoConfigData) {
+                if (captacaoConfigData.nomenclatura) {
+                    nomenclatura = captacaoConfigData.nomenclatura;
+                }
                 
-                dataInicioStr = inicio.toLocaleDateString('pt-BR', {timeZone: 'UTC'});
-                dataFimStr = fim.toLocaleDateString('pt-BR', {timeZone: 'UTC'});
+                if (captacaoConfigData.dataInicio && captacaoConfigData.dataFim) {
+                    const inicio = new Date(captacaoConfigData.dataInicio + "T00:00:00");
+                    const fim = new Date(captacaoConfigData.dataFim + "T00:00:00");
+                    const hoje = new Date();
+                    hoje.setHours(0, 0, 0, 0);
+                    
+                    dataInicioStr = inicio.toLocaleDateString('pt-BR', {timeZone: 'UTC'});
+                    dataFimStr = fim.toLocaleDateString('pt-BR', {timeZone: 'UTC'});
 
-                if (hoje <= fim) {
-                    diasRestantesDisplay = calculateWeekdays(hoje, fim);
-                } else {
-                    diasRestantesDisplay = 0; // Período terminou
+                    if (hoje <= fim) {
+                        diasRestantesDisplay = calculateWeekdays(hoje, fim);
+                    } else {
+                        diasRestantesDisplay = 0; // Período terminou
+                    }
                 }
             }
 
             return `
             <div class="bg-white p-6 rounded-xl shadow-lg border-t-4 border-indigo-500 mb-8">
-                <h3 class="text-xl font-bold text-gray-800 mb-4">Período da Captação</h2>
+                <h3 class="text-xl font-bold text-gray-800 mb-4">${nomenclatura}</h2>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
                     <div>
                         <p class="text-sm font-medium text-gray-500">Data Início</p>
@@ -851,17 +857,20 @@
             `;
         }
         
+        // 2. AJUSTE: Incluir GAP e % da META FINAL
         function renderBomDiaCaptacaoCards() {
             if (!bomDiaCaptacaoData || bomDiaCaptacaoData.length === 0) {
                 return '<div class="col-span-full bg-white p-6 rounded-xl shadow-lg border text-center text-gray-500">Nenhum dado de captação para exibir. Adicione na aba Gerenciar.</div>';
             }
 
-            const calculateMetrics = (real, meta, anterior) => {
-                const percMeta = meta > 0 ? (real / meta) : 0;
-                const percAnterior = anterior > 0 ? (real / anterior) : 0;
-                const gapMeta = real - meta;
-                const gapAnterior = real - anterior;
-                return { percMeta, percAnterior, gapMeta, gapAnterior };
+            const calculateMetrics = (real, metaDia, anoAnterior, metaFinal) => {
+                const percMetaDia = metaDia > 0 ? (real / metaDia) : 0;
+                const percAnterior = anoAnterior > 0 ? (real / anoAnterior) : 0;
+                const percMetaFinal = metaFinal > 0 ? (real / metaFinal) : 0;
+                const gapMetaDia = real - metaDia;
+                const gapAnterior = real - anoAnterior;
+                const gapMetaFinal = real - metaFinal;
+                return { percMetaDia, percAnterior, percMetaFinal, gapMetaDia, gapAnterior, gapMetaFinal };
             };
             
             const formatNum = (val) => new Intl.NumberFormat('pt-BR').format(val);
@@ -871,9 +880,9 @@
             const percentColor = (val) => val >= 1 ? 'text-green-600' : 'text-red-600';
 
             return bomDiaCaptacaoData.sort((a,b) => a.title.localeCompare(b.title)).map(item => {
-                const insc = calculateMetrics(item.real.insc, item.metaDia.insc, item.anoAnterior.insc);
-                const matFin = calculateMetrics(item.real.matFin, item.metaDia.matFin, item.anoAnterior.matFin);
-                const matAcad = calculateMetrics(item.real.matAcad, item.metaDia.matAcad, item.anoAnterior.matAcad);
+                const insc = calculateMetrics(item.real.insc, item.metaDia.insc, item.anoAnterior.insc, item.metaFinal?.insc || 0);
+                const matFin = calculateMetrics(item.real.matFin, item.metaDia.matFin, item.anoAnterior.matFin, item.metaFinal?.matFin || 0);
+                const matAcad = calculateMetrics(item.real.matAcad, item.metaDia.matAcad, item.anoAnterior.matAcad, item.metaFinal?.matAcad || 0);
 
                 return `
                 <div class="bg-white p-4 rounded-xl shadow-lg border-t-4 border-blue-500 col-span-1" id="captacao-card-${item.id}">
@@ -888,6 +897,12 @@
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100">
+                            <tr class="text-gray-500">
+                                <td class="p-2 text-left font-medium">META FINAL</td>
+                                <td>${formatNum(item.metaFinal?.insc || 0)}</td>
+                                <td>${formatNum(item.metaFinal?.matFin || 0)}</td>
+                                <td>${formatNum(item.metaFinal?.matAcad || 0)}</td>
+                            </tr>
                             <tr class="text-gray-500">
                                 <td class="p-2 text-left font-medium">META DIA</td>
                                 <td>${formatNum(item.metaDia.insc)}</td>
@@ -906,11 +921,19 @@
                                 <td>${formatNum(item.real.matFin)}</td>
                                 <td>${formatNum(item.real.matAcad)}</td>
                             </tr>
+                            
+                            <tr>
+                                <td class="p-2 text-left font-medium text-gray-500">% META FINAL</td>
+                                <td class="${percentColor(insc.percMetaFinal)} font-semibold">${formatPercent(insc.percMetaFinal)}</td>
+                                <td class="${percentColor(matFin.percMetaFinal)} font-semibold">${formatPercent(matFin.percMetaFinal)}</td>
+                                <td class="${percentColor(matAcad.percMetaFinal)} font-semibold">${formatPercent(matAcad.percMetaFinal)}</td>
+                            </tr>
+
                             <tr>
                                 <td class="p-2 text-left font-medium text-gray-500">% META DIA</td>
-                                <td class="${percentColor(insc.percMeta)} font-semibold">${formatPercent(insc.percMeta)}</td>
-                                <td class="${percentColor(matFin.percMeta)} font-semibold">${formatPercent(matFin.percMeta)}</td>
-                                <td class="${percentColor(matAcad.percMeta)} font-semibold">${formatPercent(matAcad.percMeta)}</td>
+                                <td class="${percentColor(insc.percMetaDia)} font-semibold">${formatPercent(insc.percMetaDia)}</td>
+                                <td class="${percentColor(matFin.percMetaDia)} font-semibold">${formatPercent(matFin.percMetaDia)}</td>
+                                <td class="${percentColor(matAcad.percMetaDia)} font-semibold">${formatPercent(matAcad.percMetaDia)}</td>
                             </tr>
                             <tr>
                                 <td class="p-2 text-left font-medium text-gray-500">% ANO ANT.</td>
@@ -918,11 +941,19 @@
                                 <td class="${percentColor(matFin.percAnterior)} font-semibold">${formatPercent(matFin.percAnterior)}</td>
                                 <td class="${percentColor(matAcad.percAnterior)} font-semibold">${formatPercent(matAcad.percAnterior)}</td>
                             </tr>
+
+                            <tr>
+                                <td class="p-2 text-left font-medium text-gray-500">GAP META FINAL</td>
+                                <td class="${gapColor(insc.gapMetaFinal)} font-semibold">${formatGap(insc.gapMetaFinal)}</td>
+                                <td class="${gapColor(matFin.gapMetaFinal)} font-semibold">${formatGap(matFin.gapMetaFinal)}</td>
+                                <td class="${gapColor(matAcad.gapMetaFinal)} font-semibold">${formatGap(matAcad.gapMetaFinal)}</td>
+                            </tr>
+
                             <tr>
                                 <td class="p-2 text-left font-medium text-gray-500">GAP META DIA</td>
-                                <td class="${gapColor(insc.gapMeta)} font-semibold">${formatGap(insc.gapMeta)}</td>
-                                <td class="${gapColor(matFin.gapMeta)} font-semibold">${formatGap(matFin.gapMeta)}</td>
-                                <td class="${gapColor(matAcad.gapMeta)} font-semibold">${formatGap(matAcad.gapMeta)}</td>
+                                <td class="${gapColor(insc.gapMetaDia)} font-semibold">${formatGap(insc.gapMetaDia)}</td>
+                                <td class="${gapColor(matFin.gapMetaDia)} font-semibold">${formatGap(matFin.gapMetaDia)}</td>
+                                <td class="${gapColor(matAcad.gapMetaDia)} font-semibold">${formatGap(matAcad.gapMetaDia)}</td>
                             </tr>
                              <tr>
                                 <td class="p-2 text-left font-medium text-gray-500">GAP ANO ANT.</td>
@@ -1339,11 +1370,10 @@
             const stats = calculateStats();
             const uniqueActions = [...new Set(leadsData.map(lead => lead.acao).filter(Boolean))].sort();
             
-            // 1. REMOÇÃO DO PERFIL FDV: Lógica de exibição de promotores no filtro
             // A lista de promotores no filtro só é útil para perfis de gestão (Líder/Sala/QG)
             const promotors = (currentUser.role === ROLES.LIDER_FDV || currentUser.role === ROLES.SALA_MATRICULA || currentUser.role === ROLES.QG)
                 ? [...new Map(usersData.map(user => [user.id, user.name])).values()].filter(Boolean).sort()
-                : []; // Promotor não precisa filtrar por outros promotores
+                : []; 
 
             const uniqueCourses = [...new Set(leadsData.map(lead => lead.cursoInteresse).filter(Boolean))].sort();
 
@@ -2611,6 +2641,8 @@
 
         async function handleGapUpdate(id, dataToUpdate) {
             try {
+                // Ao atualizar um campo aninhado (ex: documentos.rg), usamos a notação de ponto
+                // para que o Firestore atualize apenas o campo, e não substitua o objeto inteiro.
                 await updateDoc(doc(db, GAP_COLLECTION_PATH, id), dataToUpdate);
             } catch (error) {
                 console.error("Erro ao atualizar GAP:", error);
@@ -2642,14 +2674,17 @@
                     </table>
                 </div>
                 
-                <!-- NOVO: Gerenciamento do Período de Captação -->
+                <!-- 1. AJUSTE: Gerenciamento do Período de Captação (com nomenclatura) -->
                 <div id="captacao-config-section" class="mt-12">
                     <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-indigo-500 pb-2 mb-4">Período da Captação</h2>
                     <div class="bg-white p-6 md:p-8 rounded-xl shadow-2xl border border-gray-100 mb-8">
-                        <form id="captacao-config-form" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                        <form id="captacao-config-form" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                            <div class="md:col-span-4">
+                                ${renderInputField("Nomenclatura do Período", "config-nomenclatura", "text", true, "Ex: Captação 2025.2")}
+                            </div>
                             ${renderInputField("Data Início", "config-data-inicio", "date", true)}
                             ${renderInputField("Data Fim", "config-data-fim", "date", true)}
-                            <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg">Salvar Período</button>
+                            <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg md:col-span-2">Salvar Período</button>
                         </form>
                     </div>
                 </div>
@@ -2712,6 +2747,7 @@
                     </div>
                 </div>
 
+                <!-- 2. AJUSTE: Gerenciamento Bom Dia Captação (com Meta Final) -->
                 <div id="bom-dia-captacao-management" class="mt-12">
                     <h2 class="text-3xl font-extrabold text-gray-900 border-b-4 border-orange-500 pb-2 mb-4">Gerenciamento Bom Dia Captação</h2>
                     <div class="bg-white p-6 md:p-8 rounded-xl shadow-2xl border border-gray-100 mb-8">
@@ -2720,6 +2756,13 @@
                             <input type="hidden" id="captacao-id">
                             ${renderInputField("Título do Card", "captacao-title", "text", true, "Ex: CAPTAÇÃO BU PRESENCIAL 25.1", ICONS.TAG)}
                             
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 border p-4 rounded-lg border-orange-300">
+                                <h4 class="col-span-full font-semibold text-gray-700">Meta Final</h4>
+                                ${renderInputField("INSC", "final-insc", "number", true, "0")}
+                                ${renderInputField("MAT FIN", "final-mat-fin", "number", true, "0")}
+                                ${renderInputField("MAT ACAD", "final-mat-acad", "number", true, "0")}
+                            </div>
+
                             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 border p-4 rounded-lg">
                                 <h4 class="col-span-full font-semibold text-gray-700">Meta Dia</h4>
                                 ${renderInputField("INSC", "meta-insc", "number", true, "0")}
@@ -2734,7 +2777,7 @@
                                 ${renderInputField("MAT ACAD", "anterior-mat-acad", "number", true, "0")}
                             </div>
 
-                             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 border p-4 rounded-lg">
+                             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 border p-4 rounded-lg border-blue-300">
                                 <h4 class="col-span-full font-semibold text-gray-700">Real</h4>
                                 ${renderInputField("INSC", "real-insc", "number", true, "0")}
                                 ${renderInputField("MAT FIN", "real-mat-fin", "number", true, "0")}
@@ -2797,8 +2840,9 @@
                 </div>
             `;
             
-            // Preencher o formulário de config de captação
+            // 1. AJUSTE: Preencher o formulário de config de captação com nomenclatura
             if (captacaoConfigData) {
+                document.getElementById('config-nomenclatura').value = captacaoConfigData.nomenclatura || '';
                 document.getElementById('config-data-inicio').value = captacaoConfigData.dataInicio || '';
                 document.getElementById('config-data-fim').value = captacaoConfigData.dataFim || '';
             }
@@ -2834,21 +2878,22 @@
             document.getElementById('btn-confirm-restore').addEventListener('click', handleRestore);
         }
 
-        // NOVO: Função para salvar o período de captação
+        // 1. AJUSTE: Função para salvar o período de captação (com nomenclatura)
         async function handleSaveCaptacaoConfig(e) {
             e.preventDefault();
             const form = e.target;
+            const nomenclatura = form['config-nomenclatura'].value;
             const dataInicio = form['config-data-inicio'].value;
             const dataFim = form['config-data-fim'].value;
 
-            if (!dataInicio || !dataFim) {
-                showToast("Por favor, preencha ambas as datas.", true);
+            if (!nomenclatura || !dataInicio || !dataFim) {
+                showToast("Por favor, preencha a nomenclatura e ambas as datas.", true);
                 return;
             }
 
             try {
                 const configDocRef = doc(db, CAPTACAO_CONFIG_PATH, PERIODO_CONFIG_DOC_ID);
-                await setDoc(configDocRef, { dataInicio, dataFim }, { merge: true });
+                await setDoc(configDocRef, { nomenclatura, dataInicio, dataFim }, { merge: true });
                 showToast('Período de captação salvo com sucesso!');
             } catch (error) {
                 console.error("Erro ao salvar período:", error);
@@ -2857,7 +2902,6 @@
         }
 
         function renderUserRow(user) {
-            // 1. REMOÇÃO DO PERFIL FDV: Regra de edição.
             const isEditable = (currentUser.role === ROLES.LIDER_FDV || currentUser.role === ROLES.SALA_MATRICULA) && user.id !== currentUser.uid;
             return `
                 <tr class="hover:bg-blue-50">
@@ -2994,6 +3038,10 @@
                 if (item) {
                     document.getElementById('captacao-id').value = item.id;
                     document.getElementById('captacao-title').value = item.title;
+                    
+                    // 2. AJUSTE: Preencher Meta Final
+                    ['final-insc', 'final-mat-fin', 'final-mat-acad'].forEach(id => document.getElementById(id).value = item.metaFinal?.[id.split('-')[1]] || 0);
+
                     ['meta-insc', 'meta-mat-fin', 'meta-mat-acad'].forEach(id => document.getElementById(id).value = item.metaDia[id.split('-')[1]]);
                     ['anterior-insc', 'anterior-mat-fin', 'anterior-mat-acad'].forEach(id => document.getElementById(id).value = item.anoAnterior[id.split('-')[1]]);
                     ['real-insc', 'real-mat-fin', 'real-mat-acad'].forEach(id => document.getElementById(id).value = item.real[id.split('-')[1]]);
@@ -3007,6 +3055,7 @@
             }
         }
 
+        // 2. AJUSTE: Salvar Meta Final
         async function handleSaveCaptacao(e) {
             e.preventDefault();
             const itemId = document.getElementById('captacao-id').value;
@@ -3014,6 +3063,11 @@
 
             const data = {
                 title,
+                metaFinal: {
+                    insc: Number(document.getElementById('final-insc').value) || 0,
+                    matFin: Number(document.getElementById('final-mat-fin').value) || 0,
+                    matAcad: Number(document.getElementById('final-mat-acad').value) || 0,
+                },
                 metaDia: {
                     insc: Number(document.getElementById('meta-insc').value) || 0,
                     matFin: Number(document.getElementById('meta-mat-fin').value) || 0,
